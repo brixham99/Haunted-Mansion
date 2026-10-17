@@ -73,6 +73,15 @@ FACING_DIR_NAME = {v: k for k, v in DIRS.items()}
 # between the four isometric facings, Up/Down (W/S) walk forward/back.
 FACING_ORDER = ("E", "S", "W", "N")   # clockwise on screen: SE, SW, NW, NE (Right = +1)
 TURN_S = 0.22                  # Daleks' TURN_MS: a quarter turn; held keys repeat at this pace
+# How a quarter turn looks. With only the four diagonal sprites the figure
+# narrows (cosine ease) to TURN_SQUASH of its width, swaps to the new facing at
+# the midpoint and widens again, feet fixed, height unchanged, with a tiny
+# lift. If an in-between view exists (art.TURN_BETWEEN: assets/characters/
+# <name>_s/_w/_e/_n.png) it is shown for TURN_VIEW_SPAN of the turn instead,
+# with no squash. Back-to-back turns (Left held) run on without a pause.
+TURN_SQUASH = 0.58
+TURN_BOB = 1.5                 # px lift at the narrowest point
+TURN_VIEW_SPAN = (0.3, 0.7)
 STEP_MIN = 0.45                # a tap of Up/Down still takes a whole step (tiles)
 TURN_KEYS = {pygame.K_LEFT: -1, pygame.K_a: -1, pygame.K_RIGHT: 1, pygame.K_d: 1}
 MOVE_KEYS = {pygame.K_UP: 1, pygame.K_w: 1, pygame.K_DOWN: -1, pygame.K_s: -1}
@@ -269,6 +278,7 @@ class Game:
         self.dark_cache = {}
         self.glow_cache = {}
         self.text_cache = {}
+        self.squash_cache = {}
         self.player_light = self._make_player_light()
         self.mode = "title" if title else "play"
         self.title_t = 0.0
@@ -544,6 +554,49 @@ class Game:
         self.queued = None
         self.step_left = 0.0
         self.push_t = 0.0
+
+    def turn_u(self):
+        """How far through the current quarter turn (0..1), or None."""
+        return min(1.0, max(0.0, self.turn_t / TURN_S)) if self.turning else None
+
+    def squashed(self, img, cid, k, width):
+        """img narrowed to width px (same height), cached per character/facing/width."""
+        key = (cid, k, width)
+        out = self.squash_cache.get(key)
+        if out is None:
+            out = pygame.transform.smoothscale(img, (width, img.get_height()))
+            self.squash_cache[key] = out
+        return out
+
+    def player_pose(self):
+        """What to draw for the player: (image, anchor x, anchor y, feet or
+        None, sprite key for the shadow, horizontal scale, lift in px)."""
+        ch = self.chars[self.character]
+        meta = ch["meta"]
+        u = self.turn_u()
+        if u is None:
+            img, feet = self.walk_frame()
+            k = FACING_SPRITE[self.facing]
+            ax, ay = meta["facings"][k]["anchor"]
+            return img, ax, ay, feet, k, 1.0, 0.0
+        old, new = FACING_SPRITE[self.turn_from], FACING_SPRITE[self.facing]
+        view = art.TURN_BETWEEN.get(frozenset((old, new)))
+        if view in ch["turn"]:
+            a, b = TURN_VIEW_SPAN
+            if a <= u < b:
+                ax, ay = ch["turn_anchor"][view]
+                return ch["turn"][view], ax, ay, None, (old if u < 0.5 else new), 1.0, 0.0
+            k = old if u < a else new
+            ax, ay = meta["facings"][k]["anchor"]
+            return ch["stand"][k], ax, ay, None, k, 1.0, 0.0
+        k = old if u < 0.5 else new
+        ease = (1 - math.cos(2 * math.pi * u)) / 2          # 0 -> 1 at the midpoint -> 0
+        sx = 1.0 - (1.0 - TURN_SQUASH) * ease
+        img = ch["stand"][k]
+        w = max(1, round(img.get_width() * sx))
+        sx = w / img.get_width()
+        ax, ay = meta["facings"][k]["anchor"]
+        return self.squashed(img, self.character, k, w), ax * sx, ay, None, k, sx, TURN_BOB * ease
 
     def pose_facing(self):
         """Mid-turn the sprite keeps the old facing, then settles on the new one."""
@@ -1428,10 +1481,8 @@ class Game:
         elif kind == "player":
             if self.invuln > 0 and int(self.invuln * 10) % 2 == 0:
                 return
-            k = FACING_SPRITE[self.pose_facing()]
-            img, feet = self.walk_frame()
+            img, ax, ay, feet, k, sx, lift = self.player_pose()
             meta = self.chars[self.character]["meta"]
-            ax, ay = meta["facings"][k]["anchor"]
             px, py = self.px, self.py
             if feet is not None:
                 # Root motion: draw the figure where this frame was posed, so a
@@ -1442,13 +1493,14 @@ class Game:
                 ddx, ddy = FACING_DIR_XY[self.facing]
                 px, py = px - back * ddx, py - back * ddy
             gx, gy = self.P(px, py)
-            x0, y0 = round(gx - ax), round(gy - ay)
-            self.draw_player_shadow(gx, gy, x0, y0, feet, meta["facings"][k])
-            s.blit(img, (x0, y0))
+            self.draw_player_shadow(gx, gy, feet, meta["facings"][k], sx)
+            s.blit(img, (round(gx - ax), round(gy - ay - lift)))
 
-    def draw_player_shadow(self, gx, gy, x0, y0, feet, fmeta):
+    def draw_player_shadow(self, gx, gy, feet, fmeta, sx=1.0):
         """Ground the figure: a soft pool where they stand, and a small dark
-        contact shadow under each shoe that fades and shrinks as it lifts."""
+        contact shadow under each shoe that fades and shrinks as it lifts
+        (sx: the figure's width scale mid-turn, which draws the feet together)."""
+        ax, ay = fmeta["anchor"]
         s = self.screen
         pool = art.soft_shadow(30, 12, 70)
         s.blit(pool, (gx - pool.get_width() / 2, gy - pool.get_height() / 2))
@@ -1462,7 +1514,7 @@ class Game:
             if k <= 0.05:
                 continue
             sh = art.soft_shadow(11 * (0.65 + 0.35 * k), 4.5 * (0.65 + 0.35 * k), 150 * k)
-            fx, fy = x0 + f["x"], y0 + f["y"] + lift
+            fx, fy = gx + (f["x"] - ax) * sx, gy + (f["y"] - ay) + lift
             s.blit(sh, (fx - sh.get_width() / 2, fy - sh.get_height() / 2 - 1))
 
     def draw_popups(self):

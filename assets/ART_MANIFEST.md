@@ -131,3 +131,20 @@ Chairs and armchairs face any way (towards a table, desk or fireplace, or the mi
 
 Archie and Holly, four facings each, in `assets/characters/`, built by `tools/make_sprites.py` from the high-resolution sources in `tools/art/` (160 px figures on a 168 px canvas).
 
+## Turn in-between views (wanted)
+
+Four extra pictures per character, shown only in the middle of a quarter turn (never for walking). Until they exist the game narrows the sprite and swaps facings at the midpoint. Named by the way the character faces **on screen**:
+
+| Source to supply (tools/art/) | View | Shown between | Game file |
+|---|---|---|---|
+| `archie_turn_s_source.png` | front: facing the camera, straight on | se and sw | `assets/characters/archie_s.png` |
+| `archie_turn_w_source.png` | facing screen left (profile) | sw and nw | `assets/characters/archie_w.png` |
+| `archie_turn_e_source.png` | facing screen right (profile) | ne and se | `assets/characters/archie_e.png` |
+| `archie_turn_n_source.png` | back: facing away from the camera | nw and ne | `assets/characters/archie_n.png` |
+| `holly_turn_s_source.png` | front: facing the camera, straight on | se and sw | `assets/characters/holly_s.png` |
+| `holly_turn_w_source.png` | facing screen left (profile) | sw and nw | `assets/characters/holly_w.png` |
+| `holly_turn_e_source.png` | facing screen right (profile) | ne and se | `assets/characters/holly_e.png` |
+| `holly_turn_n_source.png` | back: facing away from the camera | nw and ne | `assets/characters/holly_n.png` |
+
+Full body, standing still with feet together-ish and both feet visible, same outfit, hair and lighting (from the upper left) as the existing art, head to toe straight up the picture. Transparent PNG is best; otherwise one flat, even background colour that is not in the character (a bright green such as #00B140 is safest; white is fine for Archie, but Holly's pale dress makes white risky). No floor, no drop shadow, no text, nothing else in the picture. At least 600 px tall for the figure (the 3/4 sources are 660 to 1200 px); any size above that works. Then run `python3 tools/make_turn_frames.py` (add `--sheet out.png` for a review sheet): it cuts the background, scales the figure to exactly 160 px and puts its feet on the same ground line as the neighbouring facings.
+
