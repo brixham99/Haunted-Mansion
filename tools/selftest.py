@@ -223,11 +223,13 @@ class Pilot:
             cell = next(c for c in o.cells() if c in reach)
             self.walk_path(cell)
             g.interact()
-            self.tick()
+            self.press((0, 0), lambda: g.key_state != "hidden", limit=60)   # (two players: the host answers)
             check(g.key_state == "revealed", f"{rid}: lifting the rug did not reveal the key")
             self.walk_path((math.floor(g.key_pos[0]), math.floor(g.key_pos[1])))
         for _ in range(5):
             self.tick()
+        if g.key_state != "carried":   # two players: wait for the host to hand it over
+            self.press((0, 0), lambda: g.key_state == "carried", limit=60)
         return check(g.key_state == "carried", f"key {g.key_place} not obtained (state {g.key_state})")
 
     def escape(self):

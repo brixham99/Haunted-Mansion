@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import heapq
+import types
 import json
 import math
 import os
@@ -28,7 +29,9 @@ import numpy as np
 import pygame
 
 import art
+import coop as C
 import mansion as M
+import net
 import scores
 from objects import (T, TILE_W, TILE_H, WALL_H, DOOR_H, ENEMY_STATS, SEARCH_LINES, SEARCH_PHRASE, nice)
 
@@ -55,6 +58,7 @@ POPUP_TIME = 1.3               # s a "+5" floats above the player
 TOP10_TIME = 7.0               # s the title screen shows the controls, then the Top 10, in turn
 BOARD_REFRESH = 3600.0         # re-fetch the Top 10 (and retry unsent scores) hourly
 TITLE_NAME = "Haunted Mansion"
+TITLE_OPTIONS = ("Play alone", "Host a game", "Join a game")
 COPYRIGHT = "\u00a92026 Nathan, Archie & Holly Anderson. Working title."
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -264,6 +268,12 @@ class Game:
         self.entry_note = ""
         self.new_high = False
         self.best_score = self.board.high_score()
+        # Two players over the network (coop.py); None in a one-player game
+        self.coop = None
+        self.lobby = None
+        self.title_opt = 0                 # 0 play alone, 1 host, 2 join
+        self.net_port = net.GAME_PORT
+        self.coop_seed = None              # testing: the house a hosted game uses
         self.killer = None
         self.bg_cache = {}
         self.dark_cache = {}
@@ -308,6 +318,7 @@ class Game:
             self.key_state = "revealed"
             self.key_pos = (self.key_place[2][0] + 0.5, self.key_place[2][1] + 0.5)
         self.lives = LIVES
+        self.max_lives = LIVES
         self.time = 0.0
         self.score = 0
         self.move_acc = 0.0               # seconds of walking not yet paid out as points
@@ -327,6 +338,8 @@ class Game:
         self.creak_t = 8.0
         self.won = False
         self.lost = False
+        self.opened_by = None
+        self.team_with = None             # the other player's name in a two-player game
         self.end_t = 0.0
         self.show_map = False
         self.paused = False
@@ -351,11 +364,14 @@ class Game:
 
     def enter_room(self, rid, arrive, facing=None):
         """arrive: ("door", side, offset) | ("link", obj) | None (middle)."""
+        prev = self.room
         self.room = self.house.rooms[rid]
         r = self.room
-        r.reset_pushables()
-        for o in r.objs:
-            o.slide_t = 0.0
+        shared = self.coop is not None and self.coop.partner.seen and self.coop.partner.room == rid
+        if not shared:   # rooms tidy themselves, unless the other player is in there
+            r.reset_pushables()
+            for o in r.objs:
+                o.slide_t = 0.0
         first = rid not in self.visited
         self.visited.add(rid)
         if facing:
@@ -374,37 +390,62 @@ class Game:
             self.px, self.py = arrive[1].exit_pos()
             self.facing = arrive[1].facing
         self.entry = (self.px, self.py, self.facing)
-        self.spawn_enemies()
+        if self.coop is not None and self.coop.host:
+            self.coop_host_enter(prev, shared)
+        else:
+            self.spawn_enemies()
         self.grace = ENTRY_GRACE
         self.push_t = 0.0
         self.step_left = 0.0
         self.queued = None
         self.searching = None
-        if first and self.scoring:
+        if first and self.scoring and not (self.coop and self.coop.client):   # the host scores the joiner's rooms
             self.add_points(PTS_ROOM)
+
+    def coop_host_enter(self, prev, shared):
+        """Host moving room: share the partner's enemies if they are in here,
+        and keep the old room's enemies going if the partner stayed behind."""
+        cp = self.coop
+        old = self.enemies
+        if shared and cp.other_enemies is not None:
+            self.enemies, cp.other_enemies = cp.other_enemies, None
+        else:
+            self.spawn_enemies()
+            if cp.partner.seen and prev is not None and cp.partner.room == prev.id:
+                cp.other_enemies = old
 
     def add_points(self, n, popup=True):
         """Score n points; a floating "+n" over the player for the bonuses."""
+        if self.coop is not None and self.coop.client:
+            self.coop.request("walk", n=n)   # the host keeps the team score
+            return
         self.score += n
         if popup:
             self.popups.append([f"+{n}", self.px, self.py, 0.0])
 
     def spawn_enemies(self):
-        r = self.room
-        self.enemies = []
-        if not self.enemies_on or not r.enemies:
+        if self.coop is not None and self.coop.client:
+            self.enemies = []          # the host sends them
             return
+        self.enemies = self.make_enemies(self.room, self.px, self.py)
+
+    def make_enemies(self, r, px, py):
+        """Room r's enemies, placed well away from someone coming in at (px, py)."""
+        out = []
+        if not self.enemies_on or not r.enemies:
+            return out
         rng = random.Random(f"{self.seed}:{r.id}")
-        reach = r.flood((int(self.px), int(self.py)))
+        reach = r.flood((int(px), int(py)))
         free = [c for c in r.free_floor() if c in reach]
-        ex, ey = self.px, self.py
+        ex, ey = px, py
         far = [c for c in free if abs(c[0] + 0.5 - ex) + abs(c[1] + 0.5 - ey) >= 4.0] or free
         rng.shuffle(far)
         for i, kind in enumerate(r.enemies):
             if not far:
                 break
             c = far[i % len(far)]
-            self.enemies.append(Enemy(kind, c[0] + 0.5, c[1] + 0.5, rng))
+            out.append(Enemy(kind, c[0] + 0.5, c[1] + 0.5, rng))
+        return out
 
     def say(self, text):
         self.msg = text
@@ -432,8 +473,19 @@ class Game:
                 self.title_pick = 0
             elif key in (pygame.K_RIGHT, pygame.K_d, pygame.K_2):
                 self.title_pick = 1
+            elif key in (pygame.K_UP, pygame.K_w):
+                self.title_opt = (self.title_opt - 1) % len(TITLE_OPTIONS)
+            elif key in (pygame.K_DOWN, pygame.K_s):
+                self.title_opt = (self.title_opt + 1) % len(TITLE_OPTIONS)
             elif key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_KP_ENTER):
-                self.start_play()
+                if self.title_opt == 0:
+                    self.start_play()
+                else:
+                    self.open_lobby("host" if self.title_opt == 1 else "join")
+            return
+        if self.mode == "lobby":
+            if isinstance(self.lobby, C.JoinLobby):
+                self.lobby.on_key(key, pygame)
             return
         if self.mode == "end":
             if key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_KP_ENTER) and self.end_t > 1.0:
@@ -442,7 +494,10 @@ class Game:
         if key in MAP_KEYS:
             self.show_map = not self.show_map
         elif key == pygame.K_p:
-            self.paused = not self.paused
+            if self.coop is not None:
+                self.say("No pausing in a two-player game: the house carries on!")
+            else:
+                self.paused = not self.paused
         elif key in ACTION_KEYS and not self.show_map and not self.paused:
             self.interact()
         elif (key in TURN_KEYS or key in MOVE_KEYS) and not self.show_map and not self.paused:
@@ -453,8 +508,11 @@ class Game:
     def entry_text(self, text):
         if not self.entry_active:
             return
+        team = self.team_with is not None
+        limit = scores.TEAM_NAME_MAX if team else scores.NAME_MAX
         for ch in text:
-            if ch.isascii() and (ch.isalnum() or ch == " ") and len(self.entry_name) < scores.NAME_MAX:
+            if ch.isascii() and (ch.isalnum() or ch == " " or (ch == "+" and team)) \
+                    and len(self.entry_name) < limit:
                 if ch == " " and (not self.entry_name or self.entry_name.endswith(" ")):
                     continue
                 self.entry_name += ch
@@ -467,12 +525,16 @@ class Game:
             self.entry_active = False
             self.entry_note = name
             self.board.submit(name, self.score)
+            if self.coop is not None:
+                self.coop.send("sent", name=name)
             self.end_t = min(self.end_t, 0.5)
             self._stop_text()
         elif key == pygame.K_ESCAPE:
             self.entry_active = False
             self.entry_note = ""
             self._stop_text()
+            if self.coop is not None:
+                self.coop.send("skip")
         elif key == pygame.K_BACKSPACE:
             self.entry_name = self.entry_name[:-1]
 
@@ -507,6 +569,8 @@ class Game:
         self.entry_active = self.qualified
         if self.entry_active:
             self.entry_name = self.board.last_name
+            if self.team_with:
+                self.entry_name = f"{CHARACTERS[self.character]}+{self.team_with}"
             try:
                 pygame.key.start_text_input()
             except Exception:
@@ -576,6 +640,101 @@ class Game:
             return (0, -1) if back else (1, 0)
         return (1 if diff == 1 else -1), 0
 
+    # ------------------------------------------------------------ two players
+    def open_lobby(self, kind):
+        self.character = CHAR_ORDER[self.title_pick]
+        self.lobby = C.HostLobby(self, self.net_port) if kind == "host" else C.JoinLobby(self)
+        self.mode = "lobby"
+        self.title_t = 0.0
+        if kind == "join":
+            try:
+                pygame.key.start_text_input()
+            except Exception:
+                pass
+
+    def close_lobby(self):
+        if self.lobby is not None:
+            self.lobby.close()
+            self.lobby = None
+        if self.mode == "lobby":
+            self.mode = "title"
+
+    def on_text(self, text):
+        """Typed characters: the Top 10 name, or a host address in the join lobby."""
+        if self.entry_active:
+            self.entry_text(text)
+        elif self.mode == "lobby" and isinstance(self.lobby, C.JoinLobby):
+            self.lobby.on_text(text)
+
+    def start_coop(self, role, link, seed, mine, theirs):
+        """Both games: build the same house from the host's seed and start."""
+        self.lobby = None
+        self._stop_text()
+        self.character = mine
+        self.title_pick = CHAR_ORDER.index(mine)
+        self.new_game(seed)
+        self.coop = C.Coop(self, link, role, theirs)
+        self.lives = self.max_lives = C.COOP_LIVES
+        self.team_with = CHARACTERS[theirs]
+        if role == "client":
+            self.enemies = []
+            self.px += 1.2                  # stand beside the host, not on top of them
+            self.entry = (self.px, self.py, self.facing)
+        self.mode = "play"
+        self.sounds.loop("ambience")
+        self.sounds.play("door")
+        self.say(f"You are {CHARACTERS[mine]}, with {CHARACTERS[theirs]}. Find the key and escape together!")
+
+    def client_hurt(self, kind, lives):
+        """Client: the host says an enemy touched us."""
+        self.lives = lives
+        self.sounds.play(f"ow_{self.character}")
+        self.sounds.play("hurt", 0.7)
+        self.say(f"Ow! The {kind} got you! {lives} {'life' if lives == 1 else 'lives'} left.")
+        self.invuln = INVULN
+        self.px, self.py, self.facing = self.entry
+        self.stop_controls()
+        self.searching = None
+
+    def finish_from_host(self, m):
+        """Client: the host says the game is over (both escaped, or no lives left)."""
+        self.won = bool(m.get("won"))
+        self.lost = not self.won
+        self.opened_by = m.get("by")
+        self.killer = m.get("killer") or "ghost"
+        self.score = int(m.get("score", self.score))
+        self.time = float(m.get("time", self.time))
+        self.visited = set(m.get("visited", [])) | self.visited
+        self.lives = int(m.get("lives", self.lives))
+        if self.won:
+            self.key_state = "carried"
+        self.mode = "end"
+        self.end_t = 0.0
+        self.sounds.loop(None)
+        if self.won:
+            self.sounds.play("unlock")
+            self.sounds.play("win")
+            self.new_best = self.best is None or self.time < self.best
+            if self.new_best:
+                self.best = self.time
+                self._save_best(self.time)
+        else:
+            self.sounds.play("gameover")
+        prev = max(self.best_score, self.board.high_score())
+        self.new_high = self.score > prev
+        self.best_score = max(prev, self.score)
+        self.board.record_local(self.score)
+        self.qualified = False
+        self.entry_active = False
+        self.entry_note = ""
+        self.coop.end_note = f"{self.coop.partner_name} is typing the team name for the Top 10..." \
+            if m.get("entry") else ""
+
+    def end_coop(self):
+        if self.coop is not None:
+            self.coop.close()
+            self.coop = None
+
     def start_play(self, seed=None):
         self.character = CHAR_ORDER[self.title_pick]
         self.new_game(seed if seed is not None else int(time.time() * 1000) % 1_000_000)
@@ -588,6 +747,10 @@ class Game:
         if self.entry_active:
             self.entry_active = False
             self._stop_text()
+            if self.coop is not None and self.coop.host:
+                self.coop.send("skip")
+        self.end_coop()
+        self.close_lobby()
         self.mode = "title"
         self.title_t = 0.0
         self.board.refresh()
@@ -692,9 +855,13 @@ class Game:
         for p in self.popups:
             p[3] += dt
         self.popups = [p for p in self.popups if p[3] < POPUP_TIME]
-        if self.mode == "title":
+        if self.mode in ("title", "lobby"):
             self.title_t += dt
+            if self.mode == "lobby" and self.lobby is not None:
+                self.lobby.update(dt)
             return
+        if self.coop is not None:
+            self.coop.tick(dt)        # network in, other room's enemies, network out
         if self.mode == "end":
             self.end_t += dt
             return
@@ -711,8 +878,10 @@ class Game:
             else:
                 self.fade = (phase, t, cb)
             return
-        if self.paused or self.show_map:
+        if self.paused or (self.show_map and self.coop is None):
             return
+        if self.show_map:           # two players: the house carries on behind the map
+            keys, auto, ctrl = None, None, (0, 0)
         self.time += dt
         self.locked_cd = max(0.0, self.locked_cd - dt)
         self.invuln = max(0.0, self.invuln - dt)
@@ -818,20 +987,36 @@ class Game:
         else:
             self.push_t = 0.0
 
-    def try_push(self, obj, d):
-        r = self.room
+    def try_push(self, obj, d, room=None, say=None, others=()):
+        """Shove obj one tile along d. room/say/others: the host acting for the
+        other player (their room, their messages, players to keep clear of)."""
+        if self.coop is not None and self.coop.client and room is None:
+            self.coop.request("push", obj=obj.id, d=list(d))
+            return False
+        r = room or self.room
+        say = say or self.say
         solid = r.solid_cells()
         trig = r.trigger_cells()
         clear = r.keep_clear()
         dest = [(c[0] + d[0], c[1] + d[1]) for c in obj.cells()]
         ok = all(r.inside(c) and (c not in solid or solid[c] is obj) and c not in trig and c not in clear for c in dest)
-        if ok and any(not e.floats and (int(e.x), int(e.y)) in dest for e in self.enemies):
+        enemies = self.enemies if r is self.room else (self.coop.other_enemies or [] if self.coop else [])
+        if ok and any(not e.floats and (int(e.x), int(e.y)) in dest for e in enemies):
             ok = False
+        if ok and self.coop is not None:   # never shove furniture onto a player
+            people = list(others)
+            p = self.coop.partner
+            if room is None and p.seen and p.room == r.id:
+                people.append((p.tx, p.ty))
+            if any((math.floor(x), math.floor(y)) in dest for x, y in people):
+                ok = False
         if ok and self.key_state == "revealed" and self.key_place[0] == r.id and \
                 (math.floor(self.key_pos[0]), math.floor(self.key_pos[1])) in dest:
             ok = False   # never shove furniture on top of the key
         if not ok:
-            if self.locked_cd <= 0:
+            if room is not None:
+                say(f"The {nice(obj.type)} won't budge any further.")
+            elif self.locked_cd <= 0:
                 self.say(f"The {nice(obj.type)} won't budge any further.")
                 self.locked_cd = 2.0
             return False
@@ -840,13 +1025,15 @@ class Game:
         obj.y += d[1]
         obj.dx, obj.dy = -d[0], -d[1]
         obj.slide_t = SLIDE_TIME
-        self.sounds.play("push")
+        if r is self.room:
+            self.sounds.play("push")
         if self.key_state == "hidden" and self.key_place[:3] == (r.id, "under", obj.id):
             self.key_state = "revealed"
             self.key_pos = (old[0] + 0.5, old[1] + 0.5)
             obj.home = (obj.x, obj.y)   # stays moved, so it never covers the key again
-            self.sounds.play("key_found")
-            self.say(f"Something glints where the {nice(obj.type)} was!")
+            if room is None:
+                self.sounds.play("key_found")
+            say(f"Something glints where the {nice(obj.type)} was!")
         return True
 
     def target_object(self):
@@ -887,6 +1074,10 @@ class Game:
         if o is None:
             self.say("Nothing to search here. Face a piece of furniture and try again.")
             return
+        if o.t.get("lift") and self.coop is not None and self.coop.client:
+            self.sounds.play("rug")
+            self.coop.request("lift", obj=o.id)   # the host lifts it (and checks underneath)
+            return
         if o.t.get("lift"):
             o.lifted = not o.lifted
             self.sounds.play("rug")
@@ -905,9 +1096,15 @@ class Game:
     def finish_search(self, o):
         r = self.room
         if self.key_state == "hidden" and self.key_place[:3] == (r.id, "search", o.id):
+            if self.coop is not None and self.coop.client:
+                self.coop.request("search", obj=o.id)   # the host hands it over
+                o.searched = True
+                return
             self.key_state = "carried"
             self.sounds.play("key_found")
             self.add_points(PTS_KEY)
+            if self.coop is not None:
+                self.coop.announce_key()
             how = SEARCH_PHRASE[o.t["search"]].format(n=nice(o.type))
             self.say(f"You found the front door key {how}!")
             return
@@ -918,7 +1115,11 @@ class Game:
         o.searched = True
 
     def try_front_door(self):
-        if self.key_state == "carried":
+        if self.key_state == "carried" and self.coop is not None and self.coop.client:
+            if self.locked_cd <= 0:
+                self.coop.request("escape")
+                self.locked_cd = 0.5
+        elif self.key_state == "carried":
             self.win()
         elif self.locked_cd <= 0:
             self.sounds.play("locked")
@@ -930,9 +1131,14 @@ class Game:
             return
         kx, ky = self.key_pos
         if abs(self.px - kx) < 0.55 and abs(self.py - ky) < 0.55:
+            if self.coop is not None and self.coop.client:
+                self.coop.want_pickup()
+                return
             self.key_state = "carried"
             self.sounds.play("key_found")
             self.add_points(PTS_KEY)
+            if self.coop is not None:
+                self.coop.announce_key()
             self.say("You picked up the front door key! Back to the Entrance Hall!")
 
     def check_exits(self):
@@ -957,35 +1163,50 @@ class Game:
 
     # ------------------------------------------------------------ enemies
     def update_enemies(self, dt):
-        if not self.enemies:
+        if self.coop is not None and self.coop.client:
+            return                       # the host moves them (coop.tick eases them along)
+        targets = [types.SimpleNamespace(x=self.px, y=self.py, invuln=self.invuln, hit=self.hurt)]
+        grace = self.grace
+        if self.coop is not None and self.coop.partner_here():
+            targets.append(self.coop.partner_target())
+            grace = max(grace, self.coop.partner.grace)
+        self.run_enemies(self.enemies, self.room, targets, grace, dt)
+
+    def run_enemies(self, enemies, r, targets, grace, dt, audible=True):
+        """Move room r's enemies after the nearest target that can be hurt;
+        a touch calls that target's hit(enemy). One player: one target."""
+        if not enemies:
             return
-        r = self.room
         solid = r.solid_cells()
-        for e in self.enemies:
+        for e in enemies:
             e.phase += dt
             e.cry_cd -= dt
-            if self.grace > 0:
+            if grace > 0:
                 continue
-            dist = math.hypot(self.px - e.x, self.py - e.y)
-            chase = dist < e.sense and self.invuln <= 0
+            t = targets[0] if len(targets) == 1 else \
+                min(targets, key=lambda t: (t.invuln > 0, math.hypot(t.x - e.x, t.y - e.y)))
+            dist = math.hypot(t.x - e.x, t.y - e.y)
+            chase = dist < e.sense and t.invuln <= 0
             if chase and not e.cried and e.cry_cd <= 0:
-                self.sounds.play(e.kind, 0.8)   # one cry each time it starts hunting you
+                if audible:
+                    self.sounds.play(e.kind, 0.8)   # one cry each time it starts hunting you
                 e.cried = True
                 e.cry_cd = 4.0
             elif not chase:
                 e.cried = False
             e.chasing = chase
             if e.floats:
-                self._float(e, r, chase, dt)
+                self._float(e, r, chase, dt, t.x, t.y)
             else:
-                self._walk(e, r, solid, chase, dist, dt)
-            if math.hypot(self.px - e.x, self.py - e.y) < e.r + PLAYER_R and self.invuln <= 0 and not self.god:
-                self.hurt(e)
-                return
+                self._walk(e, r, solid, chase, dist, dt, t.x, t.y)
+            for t in targets:
+                if math.hypot(t.x - e.x, t.y - e.y) < e.r + PLAYER_R and t.invuln <= 0 and not self.god:
+                    t.hit(e)
+                    return
 
-    def _float(self, e, r, chase, dt):
+    def _float(self, e, r, chase, dt, px, py):
         if chase:
-            tx, ty = self.px, self.py
+            tx, ty = px, py
         else:
             if e.wander is None or math.hypot(e.wander[0] - e.x, e.wander[1] - e.y) < 0.2:
                 e.wander = (e.rng.uniform(0.6, r.w - 0.6), e.rng.uniform(0.6, r.d - 0.6))
@@ -1001,13 +1222,13 @@ class Game:
         if abs(vx - vy) > 0.01:
             e.left = (vx - vy) < 0
 
-    def _walk(self, e, r, solid, chase, dist, dt):
+    def _walk(self, e, r, solid, chase, dist, dt, px, py):
         e.think -= dt
         if e.think <= 0:
             e.think = 0.45
             goal = None
             if chase:
-                goal = (min(r.w - 1, max(0, int(self.px))), min(r.d - 1, max(0, int(self.py))))
+                goal = (min(r.w - 1, max(0, int(px))), min(r.d - 1, max(0, int(py))))
             elif not e.path:
                 free = r.free_floor()
                 goal = e.rng.choice(free) if free else None
@@ -1018,7 +1239,7 @@ class Game:
                 elif chase:
                     e.path = []
         if chase and not e.path and dist < 1.2:
-            tx, ty = self.px, self.py
+            tx, ty = px, py
         elif e.path:
             tx, ty = e.path[0][0] + 0.5, e.path[0][1] + 0.5
         else:
@@ -1065,8 +1286,9 @@ class Game:
             return f"under the rug in the {room.name}"
         return SEARCH_PHRASE[o.t["search"]].format(n=nice(o.type)) + f" in the {room.name}"
 
-    def win(self):
+    def win(self, by=None):
         self.won = True
+        self.opened_by = by
         self.add_points(PTS_ESCAPE)
         self.mode = "end"
         self.end_t = 0.0
@@ -1078,6 +1300,8 @@ class Game:
             self.best = self.time
             self._save_best(self.time)
         self.end_scores()
+        if self.coop is not None:
+            self.coop.send_end(by=by)
 
     def lose(self, e):
         self.lost = True
@@ -1087,6 +1311,8 @@ class Game:
         self.sounds.play("gameover")
         self.sounds.loop(None)
         self.end_scores()
+        if self.coop is not None:
+            self.coop.send_end(killer=e.kind)
 
     # ================================================================ drawing
     def build_background(self, r):
@@ -1295,7 +1521,7 @@ class Game:
         return self.text_cache[key]
 
     def draw(self):
-        if self.mode == "title":
+        if self.mode in ("title", "lobby"):
             self.draw_title()
             return
         r = self.room
@@ -1328,12 +1554,18 @@ class Game:
         for e in self.enemies:
             items.append((e.box(), ("enemy", e)))
         items.append(((self.px - PLAYER_R, self.py - PLAYER_R, self.px + PLAYER_R, self.py + PLAYER_R), ("player",)))
+        if self.coop is not None and self.coop.partner_here():
+            p = self.coop.partner
+            items.append(((p.x - PLAYER_R, p.y - PLAYER_R, p.x + PLAYER_R, p.y + PLAYER_R), ("partner",)))
         for _, what in depth_sort(items):
             self.draw_item(what)
         dark = self.dark_cache[r.id].copy()
         lx, ly = self.P(self.px, self.py, 70)
         lr = self.player_light.get_width() // 2
         dark.blit(self.player_light, (lx - lr, ly - lr), special_flags=pygame.BLEND_RGBA_SUB)
+        if self.coop is not None and self.coop.partner_here():   # the other player carries a light too
+            qx, qy = self.P(self.coop.partner.x, self.coop.partner.y, 70)
+            dark.blit(self.player_light, (qx - lr, qy - lr), special_flags=pygame.BLEND_RGBA_SUB)
         s.blit(dark, (0, 0))
         t = self.time
         for o in r.objs:
@@ -1425,6 +1657,8 @@ class Game:
                 img = img.copy()
                 img.set_alpha(int(170 + 50 * math.sin(e.phase * 3)))
             s.blit(img, (ex - img.get_width() / 2, ey - img.get_height() + 4))
+        elif kind == "partner":
+            self.draw_partner()
         elif kind == "player":
             if self.invuln > 0 and int(self.invuln * 10) % 2 == 0:
                 return
@@ -1445,6 +1679,29 @@ class Game:
             x0, y0 = round(gx - ax), round(gy - ay)
             self.draw_player_shadow(gx, gy, x0, y0, feet, meta["facings"][k])
             s.blit(img, (x0, y0))
+
+    def draw_partner(self):
+        """The other player, from their reported position, facing and walking."""
+        p = self.coop.partner
+        if p.invuln > 0 and int(p.invuln * 10) % 2 == 0:
+            return
+        ch = self.chars[p.char]
+        meta = ch["meta"]
+        k = FACING_SPRITE[p.facing]
+        feet = None
+        if p.moving:
+            n = meta["frames"]
+            i = int(p.walk_phase * n) % n
+            img, feet = ch["walk"][k][i], meta["facings"][k]["feet"][i]
+        else:
+            img = ch["stand"][k]
+        ax, ay = meta["facings"][k]["anchor"]
+        gx, gy = self.P(p.x, p.y)
+        x0, y0 = round(gx - ax), round(gy - ay)
+        self.draw_player_shadow(gx, gy, x0, y0, feet, meta["facings"][k])
+        self.screen.blit(img, (x0, y0))
+        tag = self.text(self.f_small, CHARACTERS[p.char], (255, 225, 170))
+        self.screen.blit(tag, (round(gx - tag.get_width() / 2), y0 - tag.get_height() + 4))
 
     def draw_player_shadow(self, gx, gy, x0, y0, feet, fmeta):
         """Ground the figure: a soft pool where they stand, and a small dark
@@ -1484,9 +1741,18 @@ class Game:
         s.blit(bar, (0, 0))
         s.blit(self.text(self.f_hud, "Lives:", (255, 200, 120)), (18, 14))
         x = 18 + self.f_hud.size("Lives:")[0] + 22
-        for i in range(LIVES):
+        hearts = max(LIVES, self.max_lives)
+        for i in range(hearts):
             self.heart(s, x + i * 32, 26, (230, 50, 60) if i < self.lives else (70, 50, 56))
-        s.blit(self.text(self.f_hud, f"Score: {self.score:,}", (255, 200, 120)), (x + LIVES * 32 + 30, 14))
+        if self.coop is None:
+            s.blit(self.text(self.f_hud, f"Score: {self.score:,}", (255, 200, 120)), (x + hearts * 32 + 30, 14))
+        else:
+            s.blit(self.text(self.f_hud, f"Team score: {self.score:,}", (255, 200, 120)), (x + hearts * 32 + 24, 4))
+            p = self.coop.partner
+            where = ("here with you" if p.room == self.room.id else
+                     f"in the {self.house.rooms[p.room].name}") if p.seen else "on the way"
+            s.blit(self.text(self.f_hud_small, f"{self.coop.partner_name} is {where}", (190, 220, 200)),
+                   (x + hearts * 32 + 24, 31))
         r = self.room
         name = self.text(self.f_hud, r.name, (255, 236, 190))
         fl = self.text(self.f_hud_small, M.FLOOR_NAMES[r.floor], (200, 170, 130))
@@ -1503,7 +1769,7 @@ class Game:
             self.glow_cache["hud_key"] = (k, dim)
         k, dim = self.glow_cache["hud_key"]
         s.blit(k if self.key_state == "carried" else dim, (kx + 54, 11))
-        hint = self.text(self.f_small, "Tab: map   P: pause", (150, 130, 110), shadow=False)
+        hint = self.text(self.f_small, "Tab: map" if self.coop else "Tab: map   P: pause", (150, 130, 110), shadow=False)
         s.blit(hint, (kx - hint.get_width() - 36, 19))
         if self.msg and self.msg_t > 0:
             img = self.text(self.f_msg, self.msg, (255, 240, 210))
@@ -1554,7 +1820,10 @@ class Game:
                 fill = (160, 86, 30) if here else ((72, 56, 64) if seen else (24, 20, 28))
                 pygame.draw.rect(s, fill, (rx, ry, cw, ch), border_radius=4)
                 pygame.draw.rect(s, (200, 150, 90) if seen else (56, 46, 56), (rx, ry, cw, ch), 2, border_radius=4)
-                if not seen:
+                if self.coop is not None and self.coop.partner.seen and self.coop.partner.room == r.id:
+                    pygame.draw.rect(s, (110, 220, 170), (rx - 3, ry - 3, cw + 6, ch + 6), 3, border_radius=6)
+                    ini = self.text(self.f_map, self.coop.partner_name, (150, 255, 200))
+                    s.blit(ini, (rx + 4, ry + ch - 16))
                     continue
                 words = r.name.split()
                 lines = [r.name] if self.f_map.size(r.name)[0] < cw - 8 else [" ".join(words[:-1]), words[-1]]
@@ -1585,11 +1854,27 @@ class Game:
         veil.fill((4, 2, 8, int(min(1.0, self.end_t / 0.6) * 205)))
         s.blit(veil, (0, 0))
         n_rooms = len(self.house.rooms)
+        label = "Team score" if self.team_with else "Score"
         if self.new_high:
-            best = (self.f_sub, f"Score: {self.score:,}      A new best score!", (255, 210, 120))
+            best = (self.f_sub, f"{label}: {self.score:,}      A new best score!", (255, 210, 120))
         else:
-            best = (self.f_sub, f"Score: {self.score:,}      Best: {self.best_score:,}", (255, 210, 120))
-        if self.won:
+            best = (self.f_sub, f"{label}: {self.score:,}      Best: {self.best_score:,}", (255, 210, 120))
+        team = self.team_with
+        if self.won and team:
+            by = self.opened_by
+            who = "You" if by in (None, CHARACTERS[self.character]) else by
+            lines = [(self.f_big, "You both escaped!", (255, 190, 80)),
+                     (self.f_sub, f"{who} opened the front door.      Time taken: {fmt_time(self.time)}", (255, 236, 190)),
+                     (self.f_help, f"Lives left: {self.lives}      Rooms explored: {len(self.visited)} of {n_rooms}", (230, 214, 180)),
+                     (self.f_help, "A new best time!" if self.new_best else f"Best time: {fmt_time(self.best)}", (255, 210, 120)),
+                     best]
+        elif team:
+            lines = [(self.f_big, "Game over", (230, 70, 60)),
+                     (self.f_sub, f"The {self.killer} took your last life. The mansion keeps you both for ever...", (255, 236, 190)),
+                     (self.f_help, f"The key was {self.key_where()}.", (230, 214, 180)),
+                     (self.f_help, f"Time: {fmt_time(self.time)}      Rooms explored: {len(self.visited)} of {n_rooms}", (230, 214, 180)),
+                     best]
+        elif self.won:
             lines = [(self.f_big, "You escaped!", (255, 190, 80)),
                      (self.f_sub, f"Time taken: {fmt_time(self.time)}", (255, 236, 190)),
                      (self.f_help, f"Lives left: {self.lives}      Rooms explored: {len(self.visited)} of {n_rooms}", (230, 214, 180)),
@@ -1613,15 +1898,20 @@ class Game:
             panel.fill((10, 6, 14, 225))
             pygame.draw.rect(panel, (230, 130, 40), panel.get_rect(), 2, border_radius=6)
             s.blit(panel, ((WIN_W - pw) / 2, y))
-            im = self.text(self.f_help, "You're in the Top 10! Type your name:", (255, 236, 190))
+            im = self.text(self.f_help, "Your team is in the Top 10! Type the team name:" if self.team_with
+                           else "You're in the Top 10! Type your name:", (255, 236, 190))
             s.blit(im, ((WIN_W - im.get_width()) / 2, y + 14))
             caret = "_" if int(self.end_t * 2.5) % 2 == 0 else " "
             im = self.text(self.f_big, (self.entry_name + caret) if (self.entry_name or caret != " ") else " ", (255, 190, 80))
             s.blit(im, ((WIN_W - im.get_width()) / 2, y + 40))
-            im = self.text(self.f_small, f"Up to {scores.NAME_MAX} letters or numbers      Enter: send      Esc: skip", (200, 180, 150))
+            hint = f"Up to {scores.TEAM_NAME_MAX} letters, numbers or +" if self.team_with else \
+                f"Up to {scores.NAME_MAX} letters or numbers"
+            im = self.text(self.f_small, f"{hint}      Enter: send      Esc: skip", (200, 180, 150))
             s.blit(im, ((WIN_W - im.get_width()) / 2, y + ph - 28))
             return
         note = self.entry_status()
+        if not note and self.coop is not None and self.coop.client:
+            note = self.coop.end_note
         if note:
             im = self.text(self.f_help, note, (190, 215, 255))
             s.blit(im, ((WIN_W - im.get_width()) / 2, y))
@@ -1726,12 +2016,49 @@ class Game:
             if sel:
                 mk = self.text(self.f_small, "SELECTED", (255, 170, 60))
                 s.blit(mk, (bx + (bw - mk.get_width()) / 2, by - 24))
-        if self.show_top10 or int(self.title_t / TOP10_TIME) % 2 == 1:
+        self.draw_title_options()
+        if self.mode == "lobby" and self.lobby is not None:
+            self.draw_lobby()
+        elif self.show_top10 or int(self.title_t / TOP10_TIME) % 2 == 1:
             self.draw_top10()
         else:
             self.draw_controls()
         cp = self.text(self.f_small, COPYRIGHT, (190, 170, 150))
         s.blit(cp, ((WIN_W - cp.get_width()) / 2, WIN_H - 28))
+
+    def draw_title_options(self):
+        """Play alone / Host a game / Join a game, to the right of the characters."""
+        s = self.screen
+        x, y = 880, 262
+        hd = self.text(self.f_small, "Up / Down: choose", (200, 170, 130))
+        s.blit(hd, (x + (300 - hd.get_width()) / 2, y - 26))
+        for i, label in enumerate(TITLE_OPTIONS):
+            sel = i == self.title_opt
+            box = pygame.Surface((300, 50), pygame.SRCALPHA)
+            box.fill((20, 10, 24, 220 if sel else 140))
+            pygame.draw.rect(box, (255, 170, 60) if sel else (120, 80, 60), box.get_rect(), 3 if sel else 1, border_radius=6)
+            s.blit(box, (x, y + i * 62))
+            im = self.text(self.f_sub, label, (255, 220, 160) if sel else (180, 150, 120))
+            s.blit(im, (x + (300 - im.get_width()) / 2, y + i * 62 + (50 - im.get_height()) / 2))
+        if self.title_opt == 2:
+            im = self.text(self.f_small, "You'll play whoever the host doesn't", (200, 170, 130))
+            s.blit(im, (x + (300 - im.get_width()) / 2, y + 3 * 62))
+
+    def draw_lobby(self):
+        """Host or join, in place of the controls panel."""
+        s = self.screen
+        lines = self.lobby.lines()
+        pw, py = 960, 524
+        ph = 46 + 30 * (len(lines) - 1) + 14
+        panel = pygame.Surface((pw, ph), pygame.SRCALPHA)
+        panel.fill((8, 4, 12, 215))
+        pygame.draw.rect(panel, (230, 130, 40, 230), panel.get_rect(), 2, border_radius=6)
+        s.blit(panel, ((WIN_W - pw) / 2, py))
+        hd = self.text(self.f_sub, lines[0], (255, 170, 60))
+        s.blit(hd, ((WIN_W - hd.get_width()) / 2, py + 8))
+        for i, ln in enumerate(lines[1:]):
+            im = self.text(self.f_help, ln, (235, 220, 190))
+            s.blit(im, ((WIN_W - im.get_width()) / 2, py + 50 + i * 30))
 
     def best_line(self):
         self.best_score = max(self.best_score, self.board.high_score())
@@ -1778,7 +2105,7 @@ class Game:
 
     def draw_controls(self):
         s = self.screen
-        lines = ["Left / Right (or 1 / 2): choose character      Enter / Space: start",
+        lines = ["Left / Right (or 1 / 2): choose character      Up / Down: alone, host or join      Enter: start",
                  "Left / Right (A / D): turn      Up / Down (W / S): walk forwards / backwards",
                  "Space / E: search or lift      Walk into chairs, chests and crates to push them",
                  "Tab / M: map      P: pause      Esc: title screen"]
@@ -1812,6 +2139,7 @@ def parse_args(argv):
     p.add_argument("--facing", default=None, choices=("N", "E", "S", "W"))
     p.add_argument("--sim", type=float, default=1.2, help="debug: seconds to simulate before the screenshot")
     p.add_argument("--offline", action="store_true", help="no online high scores (local file only)")
+    p.add_argument("--port", type=int, default=net.GAME_PORT, help="TCP port for hosting a two-player game")
     p.add_argument("--scores-file", default=None, help="debug: high score file instead of ~/.haunted_mansion/scores.json")
     p.add_argument("--show-top10", action="store_true", help="debug: keep the Top 10 on the title screen")
     p.add_argument("--score", type=int, default=None, help="debug: score for the scene (e.g. win/lose name entry)")
@@ -1836,6 +2164,7 @@ def main(argv=None):
                 save=not headless, title=args.scene in (None, "title") and args.room is None,
                 online=not (headless or args.offline), scores_file=args.scores_file)
     game.show_top10 = args.show_top10
+    game.net_port = args.port
     if args.room:
         game.mode = "play"
         game.enter_room(args.room, None)
@@ -1882,12 +2211,14 @@ def main(argv=None):
             if ev.type == pygame.QUIT:
                 running = False
             elif ev.type == pygame.TEXTINPUT:
-                game.entry_text(ev.text)
+                game.on_text(ev.text)
             elif ev.type == pygame.KEYDOWN:
                 if game.entry_active:
                     game.entry_key(ev.key)
                 elif ev.key == pygame.K_ESCAPE:
-                    if game.mode == "title":
+                    if game.mode == "lobby":
+                        game.close_lobby()
+                    elif game.mode == "title":
                         running = False
                     elif game.show_map:
                         game.show_map = False
@@ -1898,6 +2229,8 @@ def main(argv=None):
         game.update(dt, keys=pygame.key.get_pressed())
         game.draw()
         pygame.display.flip()
+    game.end_coop()       # tell the other player we've gone
+    game.close_lobby()
     pygame.quit()
     return 0
 

@@ -134,10 +134,15 @@ class Flags:
         return img
 
 
+TEAM_NAME_MAX = 13           # two-player team names such as "Archie+Holly"
+
+
 def clean_name(text: str) -> str:
-    """Letters, digits and single spaces only, at most NAME_MAX characters."""
-    out = "".join(ch for ch in str(text) if ch.isascii() and (ch.isalnum() or ch == " "))
-    return " ".join(out.split())[:NAME_MAX]
+    """Letters, digits, '+' and single spaces only, at most TEAM_NAME_MAX
+    characters (the name entry itself allows NAME_MAX, or TEAM_NAME_MAX and
+    '+' for a team)."""
+    out = "".join(ch for ch in str(text) if ch.isascii() and (ch.isalnum() or ch in " +"))
+    return " ".join(out.split())[:TEAM_NAME_MAX]
 
 
 class Leaderboard:

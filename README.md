@@ -31,6 +31,25 @@ The game is drawn at 1280 x 800 and the window can be resized. It uses pygame-ce
 - Your score is shown at the top of the screen, and the bonuses float up over your head. The end screen shows your score and the best score.
 - The title screen takes turns showing the controls and a shared online **Top 10** (dreamlo), with a flag for each player's country. If your score makes the Top 10 you can type a name (up to 8 letters or numbers). Without the internet, scores are kept in `~/.haunted_mansion/scores.json` and sent next time; the game never waits for the network.
 
+## Two players (network)
+
+Two people can play in the same house on two computers on the same network, for example Archie on one Mac and Holly on another. Both computers need the same version of the game.
+
+1. On the first Mac, pick a character on the title screen, press **Down** to choose **Host a game** and press **Enter**. The screen shows "Waiting for the other player" and this Mac's address (for example `192.168.1.20`). The first time, macOS asks "Do you want the application Python to accept incoming network connections?": click **Allow**. (If you clicked Deny by mistake, allow Python again in System Settings > Network > Firewall > Options.)
+2. On the second Mac, choose **Join a game** and press **Enter**. The host should appear in the list within a second or two (pick it with Up / Down if there is more than one); if it doesn't, type the host's address shown on the first Mac. Press **Enter** to join. The joiner plays whichever character the host didn't pick. macOS may ask the joining Mac to allow incoming connections too (for the "find games" broadcast); Allow is fine, and joining by typed address works either way.
+3. The game starts on both Macs at once, in the Entrance Hall. **Esc** in the lobby goes back.
+
+Rules in a two-player game:
+
+- It's one house: the host's game decides the layout, where the key is, the furniture and the ghosts and monsters. You can split up and explore different rooms; when you're in the same room you see each other (with a name over your partner's head), and the map (**Tab**) shows your partner's room outlined in green.
+- The key is the team's. Once either of you picks it up, either of you can open the front door, and you both escape together.
+- Lives are shared: the pair has 5 hearts between you. A touch costs a heart from the pool and sends that player back to where they came in.
+- One **team score**: both players' walking seconds, 5 points for each room first entered by either of you, 50 for the key and 200 for the escape. If it makes the Top 10, the host types the team name (it's filled in as, for example, `Archie+Holly`; up to 13 letters, numbers or +).
+- There's no pausing (the house carries on for the other player).
+- If one game quits or the connection drops (nothing heard for 5 seconds), the other player is told and carries on alone in the same house.
+
+The game uses TCP port 50555 (the game) and UDP port 50556 (finding games on the network). Both Macs must be on the same network; it doesn't work across the internet without setting up port forwarding. If something else uses the port, start both games with, for example, `python3 game.py --port 50600`, and type `address:50600` when joining.
+
 ## The mansion
 
 | Floor | Rooms |
@@ -55,5 +74,6 @@ Ways between floors: the grand stairs (Staircase Hall and Landing), the cellar s
 - `tools/selftest.py`: headless test. It checks the data, that every room can be reached, and that every hiding place can be found, then plays the game automatically: a tour of all 35 rooms, 60 games straight to the key and out, and one game for every hiding place.
 - `scores.py`: the online Top 10 (its own dreamlo board, separate from Daleks in Hedges and Dinosaur vs Bees), flags and the local scores file. Network calls run on background threads; HTTPS lookups fall back to certifi or no verification on a Python without CA certificates.
 - `tools/score_test.py`: headless checks of every points rule (and whole games scored against an independent tally), plus qualifying, name entry and the faked dreamlo calls.
+- `net.py`: the network layer, standard library only: JSON lines over TCP with reader and writer threads (the game loop never waits), a UDP beacon and scanner for finding games, and a 5 second timeout. `coop.py`: the two-player game on top of it (the host-authoritative rules above, the partner's eased position and walk cycle, and the host and join lobbies). `tools/net_test.py`: headless test that runs a host and a joiner in one process on localhost through the real lobbies (discovery and typed address): same house, each sees the other move, joiner's furniture pushes, searches and key pickups register on the host, escapes, shared lives, team score and name, and every kind of disconnect.
 - `tools/shots.py`: saves sample screenshots.
 - Debug: `python3 game.py --room crypt --no-enemies`, or headless `SDL_VIDEODRIVER=dummy python3 game.py --scene room --room library --screenshot out.png`.
