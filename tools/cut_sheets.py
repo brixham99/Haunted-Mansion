@@ -10,13 +10,19 @@ placeholders.
   marble, the cot, the cream linen press, the tablecloth. Enclosed pockets
   count as background only when they are small-ish flat pure white (gaps
   between cot bars, holes in the cobweb, under a table).
-- Items: each sheet splits into its rows at the widest empty band, then each
-  row into its items at the widest empty columns (SHEETS.md gives the order).
+- Items: connected blobs on the white, grouped into the sheet's items, read
+  in rows top to bottom and left to right (SHEETS.md gives the order). A
+  None in LAYOUT is an old version that a later sheet replaces: it is still
+  found (so the rest of the sheet splits right) but not saved. furn1.jpg and
+  the front-on pieces of furn2/3/4/7 are replaced by the corner views in
+  furn1_iso.jpg and furn8_iso.jpg.
 - Edges: soft alpha from the distance to white, with the white unmixed from
   the edge colour (no white halo); specks are dropped.
 - Facing: the manifest wants furniture fronts towards the viewer's lower
   right; items painted the other way are mirrored (MIRROR below). Wall items
   are flat front views and are left as they are.
+- Pale grey painted ground shadows under furniture become translucent black
+  (fix_ground_shadow), so they darken the floor instead of lighting it.
 - Rugs are warped (perspective) so their four corners sit exactly on the
   footprint diamond, so they lie flat and fill their tiles.
 - A light harmonise (HARMONISE) brings the painted colours a little closer to
@@ -36,13 +42,15 @@ sys.path.insert(0, ROOT)
 
 LAYOUT = {
     "enemies.jpg": [["ghost", "goblin", "bat"], ["spider", "skeleton", "monster"]],
-    "furn1.jpg": [["grandfather_clock", "wardrobe", "bookcase"], ["chest_of_drawers", "kitchen_dresser", "fireplace"]],
-    "furn2.jpg": [["piano", "desk", "wine_rack"], ["barrel", "coffin", "toy_box"]],
-    "furn3.jpg": [["trunk", "suit_of_armour", "linen_press"], ["bed", "coal_heap", "cauldron"]],
-    "furn4.jpg": [["chair", "armchair", "chest"], ["crate", "rocking_horse", "dining_table"]],
+    # furn1.jpg (front-on) is no longer used: all six are in furn1_iso.jpg
+    "furn1_iso.jpg": [["grandfather_clock", "wardrobe", "bookcase"], ["chest_of_drawers", "kitchen_dresser", "fireplace"]],
+    "furn2.jpg": [[None, "desk", "wine_rack"], ["barrel", "coffin", "toy_box"]],          # piano: furn8_iso
+    "furn3.jpg": [["trunk", "suit_of_armour", None], ["bed", "coal_heap", "cauldron"]],   # linen_press: furn8_iso
+    "furn4.jpg": [[None, None, "chest"], ["crate", None, "dining_table"]],                # chair, armchair, rocking_horse: furn8_iso
     "furn5.jpg": [["round_table", "kitchen_table", "sofa"], ["billiard_table", "range_cooker", "sink"]],
     "furn6.jpg": [["boiler", "water_tank", "tomb"], ["mangle", "washtub", "bath"]],
-    "furn7.jpg": [["washstand", "cot", "potted_palm", "statue"], ["candelabra", "pumpkin", "dummy", "harp"]],
+    "furn7.jpg": [["washstand", "cot", "potted_palm", "statue"], ["candelabra", "pumpkin", "dummy", None]],  # harp: furn8_iso
+    "furn8_iso.jpg": [["piano", "linen_press", "chair"], ["armchair", "rocking_horse", "harp"]],
     "wall.jpg": [["painting", "painting_lady", "painting_landscape", "mirror", "window", "cobweb"],
                  ["key", "sewing_machine"]],
     "links.jpg": [["front_door", "door_frame", "stairs_up", "stairs_down", "ladder_up", "trapdoor"],
@@ -53,9 +61,13 @@ LAYOUT = {
 # (Judged from the cut-outs: the side with the doors/drawers/face/seat.)
 # Rule: if the narrow end panel shows on the RIGHT, the front faces lower left.
 # Long pieces also have to lie along their footprint (bed, tables, bath, sofa).
-MIRROR = {"piano", "desk", "wine_rack", "toy_box", "trunk", "suit_of_armour", "linen_press", "bed",
+# The iso sheets (furn1_iso, furn8_iso) are all painted front to lower left
+# except the chair (seat already to the lower right) and the harp (symmetric).
+MIRROR = {"desk", "wine_rack", "toy_box", "trunk", "suit_of_armour", "bed",
           "chest", "dining_table", "sofa", "billiard_table", "range_cooker", "sink", "boiler", "bath",
-          "washstand", "sewing_machine", "ladder_up", "goblin", "spider"}
+          "washstand", "sewing_machine", "ladder_up", "goblin", "spider",
+          "grandfather_clock", "wardrobe", "bookcase", "chest_of_drawers", "kitchen_dresser", "fireplace",
+          "piano", "linen_press", "armchair", "rocking_horse"}
 
 BG_T = 20                  # "white": max channel distance from 255
 HOLE_MAX, HOLE_FLAT = 40000, 0.6
@@ -194,6 +206,48 @@ def cut_item(rgb, d, fg, box):
     return img.crop(img.split()[3].getbbox())
 
 
+# Pieces painted standing on a pale grey drop shadow: the shadow is light
+# grey on the white sheet, which would show as a pale patch on a dark floor.
+# Only furniture (the ghost is pale grey all over), and only the lower band.
+NO_SHADOW_FIX = {"ghost", "goblin", "bat", "spider", "skeleton", "monster", "key", "rug", "rug_lifted",
+                 "painting", "painting_lady", "painting_landscape", "mirror", "window", "cobweb",
+                 "front_door", "door_frame", "stairs_up", "stairs_down", "ladder_up", "trapdoor"}
+SHADOW_BAND = 0.35
+# Pale shadow seen through gaps (under a barrel stand, between iron legs) is
+# enclosed, so it is not reached from the outside; enclosed pale-grey pockets
+# in the bottom band count as shadow too, except on pieces whose own bodies
+# are pale or grey metal/stone there (they would lose their highlights).
+POCKETS_KEEP = {"washtub", "water_tank", "statue", "tomb", "suit_of_armour", "boiler", "cot", "round_table",
+                "linen_press", "fireplace", "washstand", "bath", "coffin", "range_cooker", "pumpkin"}
+
+
+def fix_ground_shadow(img, pockets=True):
+    """Turn the painted pale-grey ground shadow (neutral light grey reached from
+    the outside, in the bottom of the sprite) into translucent black with the
+    same look over white, so it darkens the floor instead."""
+    a = np.asarray(img).astype(np.float64)
+    rgb, al = a[..., :3], a[..., 3] / 255.0
+    h = a.shape[0]
+    seen = 255.0 - al[..., None] * (255.0 - rgb)       # as painted over the white
+    sat = seen.max(axis=2) - seen.min(axis=2)
+    cand = (al > 0) & (sat < 14) & (seen.min(axis=2) > 115)
+    cand[: int(h * (1 - SHADOW_BAND))] = False
+    outside = np.asarray(Image.fromarray(((al < 0.5) * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(5))) > 0
+    lab = label(cand)
+    ids = np.unique(lab[outside & cand])
+    ids = ids[ids > 0]
+    if pockets:
+        sizes = np.bincount(lab.ravel())
+        ids = np.union1d(ids, [i for i in range(1, len(sizes)) if sizes[i] >= 30])
+    m = np.isin(lab, ids)
+    if not m.any():
+        return img
+    out = a.copy()
+    out[m, :3] = 0
+    out[m, 3] = np.clip((255.0 - seen.mean(axis=2)[m]) * 1.3, 0, 255)
+    return Image.fromarray((out + 0.5).astype(np.uint8), "RGBA")
+
+
 def harmonise(img):
     a = img.split()[3]
     rgb = img.convert("RGB")
@@ -248,9 +302,13 @@ def main(argv):
         bg, d = background(rgb)
         fg = ~bg
         for name, box, mask in find_items(fg, rows):
+            if name is None:
+                continue
             img = cut_item(rgb, d, mask, box)
             if name in MIRROR:
                 img = img.transpose(Image.FLIP_LEFT_RIGHT)
+            if name not in NO_SHADOW_FIX:
+                img = fix_ground_shadow(img, pockets=name not in POCKETS_KEEP)
             img = harmonise(img)
             if name in ("rug", "rug_lifted"):
                 img = flatten_rug(img, name)
