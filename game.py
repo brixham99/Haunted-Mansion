@@ -59,10 +59,14 @@ FACING_SPRITE = {"N": "ne", "E": "se", "S": "sw", "W": "nw"}
 FACING_DIR_XY = {"N": (0, -1), "E": (1, 0), "S": (0, 1), "W": (-1, 0)}
 WALK_START = 0.2               # a fresh walk starts just before the feet pass (no leap from standing)
 DIRS = {"N": (0, -1), "S": (0, 1), "E": (1, 0), "W": (-1, 0)}
-# Each arrow moves one eighth-turn clockwise of its label on screen:
-#   Up = up-right (N), Right = down-right (E), Down = down-left (S), Left = up-left (W)
-KEYS = {"N": (pygame.K_UP, pygame.K_w), "E": (pygame.K_RIGHT, pygame.K_d),
-        "S": (pygame.K_DOWN, pygame.K_s), "W": (pygame.K_LEFT, pygame.K_a)}
+FACING_DIR_NAME = {v: k for k, v in DIRS.items()}
+# Tank controls, as in Daleks in Hedges: Left/Right (A/D) turn a quarter turn
+# between the four isometric facings, Up/Down (W/S) walk forward/back.
+FACING_ORDER = ("E", "S", "W", "N")   # clockwise on screen: SE, SW, NW, NE (Right = +1)
+TURN_S = 0.22                  # Daleks' TURN_MS: a quarter turn; held keys repeat at this pace
+STEP_MIN = 0.45                # a tap of Up/Down still takes a whole step (tiles)
+TURN_KEYS = {pygame.K_LEFT: -1, pygame.K_a: -1, pygame.K_RIGHT: 1, pygame.K_d: 1}
+MOVE_KEYS = {pygame.K_UP: 1, pygame.K_w: 1, pygame.K_DOWN: -1, pygame.K_s: -1}
 ACTION_KEYS = (pygame.K_SPACE, pygame.K_e, pygame.K_RETURN, pygame.K_KP_ENTER)
 MAP_KEYS = (pygame.K_TAB, pygame.K_m)
 
@@ -303,6 +307,12 @@ class Game:
         self.room = None
         self.facing = "N"
         self.moving = False
+        self.turning = False
+        self.turn_t = 0.0
+        self.turn_from = self.facing
+        self.queued = None             # one tapped action waiting for a turn/step to finish
+        self.step_left = 0.0           # distance still owed to a tapped step
+        self.step_sign = 0
         self.walk_phase = WALK_START   # walk cycle position (0..1), advanced by distance walked
         self.enter_room(start_room, None)
         if start_room == M.START_ROOM:
@@ -338,6 +348,8 @@ class Game:
         self.spawn_enemies()
         self.grace = ENTRY_GRACE
         self.push_t = 0.0
+        self.step_left = 0.0
+        self.queued = None
         self.searching = None
 
     def spawn_enemies(self):
@@ -393,6 +405,73 @@ class Game:
             self.paused = not self.paused
         elif key in ACTION_KEYS and not self.show_map and not self.paused:
             self.interact()
+        elif (key in TURN_KEYS or key in MOVE_KEYS) and not self.show_map and not self.paused:
+            action = ("turn", TURN_KEYS[key]) if key in TURN_KEYS else ("step", MOVE_KEYS[key])
+            self.try_action(action)
+
+    # --------------------------------------------------- tank controls (as Daleks in Hedges)
+    def busy(self):
+        return self.turning or self.step_left > 0
+
+    def try_action(self, action):
+        """A tap: start it now, or queue it (one deep) if a turn/step is under way."""
+        if self.mode != "play" or self.searching or self.fade:
+            return False
+        if self.busy():
+            self.queued = action
+            return False
+        kind, sign = action
+        if kind == "turn":
+            self.start_turn(sign)
+        else:
+            self.step_left, self.step_sign = STEP_MIN, sign
+        return True
+
+    def start_turn(self, sign):
+        i = FACING_ORDER.index(self.facing)
+        self.turn_from = self.facing
+        self.facing = FACING_ORDER[(i + (1 if sign > 0 else -1)) % 4]
+        self.turning = True
+        self.turn_t = 0.0
+        self.step_left = 0.0
+        self.push_t = 0.0
+
+    def stop_controls(self):
+        self.turning = False
+        self.queued = None
+        self.step_left = 0.0
+        self.push_t = 0.0
+
+    def pose_facing(self):
+        """Mid-turn the sprite keeps the old facing, then settles on the new one."""
+        if self.turning and self.turn_t < TURN_S / 2:
+            return self.turn_from
+        return self.facing
+
+    @staticmethod
+    def controls(keys):
+        """(turn, move) from held keys. A held turn wins over a held step."""
+        left = keys[pygame.K_LEFT] or keys[pygame.K_a]
+        right = keys[pygame.K_RIGHT] or keys[pygame.K_d]
+        fwd = keys[pygame.K_UP] or keys[pygame.K_w]
+        back = keys[pygame.K_DOWN] or keys[pygame.K_s]
+        turn = (1 if right else 0) - (1 if left else 0)
+        move = 0 if turn else (1 if fwd else 0) - (1 if back else 0)
+        return turn, move
+
+    def steer(self, d, back=True):
+        """(turn, move) that heads in world direction d with the tank controls:
+        walk if already facing it (or backwards if facing away and back is
+        allowed), otherwise turn the shorter way. Used by the autopilot."""
+        if d == (0, 0):
+            return 0, 0
+        want = next(k for k, v in DIRS.items() if v == tuple(d))
+        if self.facing == want:
+            return 0, 1
+        diff = (FACING_ORDER.index(want) - FACING_ORDER.index(self.facing)) % 4
+        if diff == 2:
+            return (0, -1) if back else (1, 0)
+        return (1 if diff == 1 else -1), 0
 
     def start_play(self, seed=None):
         self.character = CHAR_ORDER[self.title_pick]
@@ -408,15 +487,6 @@ class Game:
         self.show_map = False
         self.paused = False
         self.sounds.loop("title_theme")
-
-    @staticmethod
-    def input_dir(keys):
-        dx = dy = 0
-        for d, ks in KEYS.items():
-            if any(keys[k] for k in ks):
-                dx += DIRS[d][0]
-                dy += DIRS[d][1]
-        return dx, dy
 
     # ------------------------------------------------------------ collision
     def blocked_cell(self, c, solid):
@@ -443,21 +513,21 @@ class Game:
     def advance_walk(self, dist):
         """Move the walk cycle on by the distance actually walked (so the
         planted foot never slides) and play a footstep at each touch-down."""
-        if dist <= 0:
+        if dist == 0:
             return
         meta = self.chars[self.character]["meta"]
         old = self.walk_phase
         new = old + dist / meta["cycle_tiles"]
-        # touch-downs at phase 0 (near foot) and 0.5 (far foot)
-        for _ in range(int(math.floor(new * 2)) - int(math.floor(old * 2))):
+        # touch-downs at phase 0 (near foot) and 0.5 (far foot), either direction
+        for _ in range(abs(int(math.floor(new * 2)) - int(math.floor(old * 2)))):
             self.step_n += 1
             self.sounds.play(("step1", "step2", "step3")[self.step_n % 3])
-        self.walk_phase = new % 1.0 if new >= 1.0 else new
+        self.walk_phase = new % 1.0
 
     def walk_frame(self):
         """(image, foot info or None) for the player right now."""
         ch = self.chars[self.character]
-        k = FACING_SPRITE[self.facing]
+        k = FACING_SPRITE[self.pose_facing()]
         if not self.moving:
             return ch["stand"][k], None
         n = ch["meta"]["frames"]
@@ -505,7 +575,9 @@ class Game:
         return bumped
 
     # ------------------------------------------------------------ update
-    def update(self, dt, keys=None, auto=None):
+    def update(self, dt, keys=None, auto=None, ctrl=None):
+        """keys: held keys (tank controls); ctrl: (turn, move) directly;
+        auto: a world direction, steered to with the tank controls."""
         if self.mode == "title":
             self.title_t += dt
             return
@@ -542,20 +614,47 @@ class Game:
                 self.finish_search(o)
             self.update_enemies(dt)
             return
-        dx, dy = auto if auto is not None else (self.input_dir(keys) if keys is not None else (0, 0))
-        self.moving = bool(dx or dy)
-        if self.moving:
-            if dx and dy:
-                both = {"E" if dx > 0 else "W", "S" if dy > 0 else "N"}
-                self.facing = self.facing if self.facing in both else ("E" if dx > 0 else "W")
-            elif dx:
-                self.facing = "E" if dx > 0 else "W"
-            else:
-                self.facing = "S" if dy > 0 else "N"
+        if ctrl is not None:
+            turn, move = ctrl
+        elif auto is not None:
+            turn, move = self.steer(auto)
+        elif keys is not None:
+            turn, move = self.controls(keys)
+        else:
+            turn, move = 0, 0
+        if self.turning:
+            self.turn_t += dt
+            if self.turn_t >= TURN_S:
+                extra = self.turn_t - TURN_S
+                self.turning = False
+                q, self.queued = self.queued, None
+                if q is not None:
+                    self.try_action(q)
+                elif turn:                 # still held: the next quarter turn follows straight on
+                    self.start_turn(turn)
+                    self.turn_t = extra
+        elif turn and self.step_left <= 0:
+            self.start_turn(turn)
+        sign = 0
+        if not self.turning:
+            sign = move if move else (self.step_sign if self.step_left > 0 else 0)
+        self.moving = bool(sign)
+        if sign:
+            dx, dy = DIRS[self.facing][0] * sign, DIRS[self.facing][1] * sign
             ox, oy = self.px, self.py
             bumped = self.move_player(dx, dy, dt)
-            self.advance_walk(math.hypot(self.px - ox, self.py - oy))
-            self.handle_bump(bumped, dx, dy, dt)
+            dist = math.hypot(self.px - ox, self.py - oy)
+            self.advance_walk(dist * sign)          # backwards plays the cycle in reverse
+            if self.step_left > 0:
+                self.step_left = 0.0 if dist < 1e-4 else max(0.0, self.step_left - dist)
+                if self.step_left <= 0:
+                    q, self.queued = self.queued, None
+                    if q is not None:
+                        self.try_action(q)
+            if sign > 0:
+                self.handle_bump(bumped, dx, dy, dt)   # push, climb, front door: facing it only
+            else:
+                self.push_t = 0.0
             if self.fade or self.mode != "play":
                 return
         else:
@@ -828,6 +927,7 @@ class Game:
         self.say(f"Ow! The {e.kind} got you! {self.lives} {'life' if self.lives == 1 else 'lives'} left.")
         self.invuln = INVULN
         self.px, self.py, self.facing = self.entry
+        self.stop_controls()
         self.spawn_enemies()
         self.grace = ENTRY_GRACE
 
@@ -1177,7 +1277,7 @@ class Game:
         elif kind == "player":
             if self.invuln > 0 and int(self.invuln * 10) % 2 == 0:
                 return
-            k = FACING_SPRITE[self.facing]
+            k = FACING_SPRITE[self.pose_facing()]
             img, feet = self.walk_frame()
             meta = self.chars[self.character]["meta"]
             ax, ay = meta["facings"][k]["anchor"]
@@ -1440,7 +1540,7 @@ class Game:
                 mk = self.text(self.f_small, "SELECTED", (255, 170, 60))
                 s.blit(mk, (bx + (bw - mk.get_width()) / 2, by - 24))
         lines = ["Left / Right (or 1 / 2): choose character      Enter / Space: start",
-                 "Arrow keys or WASD to walk (Up goes up-right, Left goes up-left)",
+                 "Left / Right (A / D): turn      Up / Down (W / S): walk forwards / backwards",
                  "Space / E: search or lift      Walk into chairs, chests and crates to push them",
                  "Tab / M: map      P: pause      Esc: title screen"]
         ph = 30 * len(lines) + (34 if self.best is not None else 0) + 14

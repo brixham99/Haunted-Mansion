@@ -59,9 +59,11 @@ class Pilot:
         self.shot_rooms = set()
 
     # --- low level
-    def tick(self, d=(0, 0)):
+    def tick(self, d=(0, 0), back=True):
+        """One frame heading in world direction d with the tank controls
+        (turn the shorter way, then walk; walk backwards if facing away)."""
         g = self.g
-        g.update(DT, auto=d)
+        g.update(DT, ctrl=g.steer(d, back))
         self.frames += 1
         if self.shots and g.mode == "play" and not g.fade and g.room.id not in self.shot_rooms and g.grace <= 0.5:
             self.shot_rooms.add(g.room.id)
@@ -75,10 +77,26 @@ class Pilot:
             n += 1
 
     def steer_to(self, tx, ty, tol=0.06):
+        """One axis at a time (tank controls cannot walk diagonally); the axis
+        already being faced goes first, to save turns."""
         g = self.g
         dx = 0 if abs(tx - g.px) <= tol else (1 if tx > g.px else -1)
         dy = 0 if abs(ty - g.py) <= tol else (1 if ty > g.py else -1)
+        if dx and dy:
+            return (dx, 0) if g.facing in ("E", "W") else (0, dy)
         return dx, dy
+
+    def face(self, d):
+        """Turn to face world direction d, then lean into it a moment."""
+        g = self.g
+        n = 0
+        while g.facing != G.FACING_DIR_NAME[tuple(d)] or g.turning:
+            self.tick(d, back=False)
+            n += 1
+            if n > 200:
+                raise Stuck(f"{g.room.id}: could not turn to {d}")
+        for _ in range(3):
+            self.tick(d, back=False)
 
     def walk_path(self, goal, limit=1500):
         """Walk tile by tile to `goal` (a tile) inside the current room."""
@@ -105,7 +123,7 @@ class Pilot:
     def press(self, d, until, limit=240):
         n = 0
         while not until():
-            self.tick(d)
+            self.tick(d, back=False)   # into doors, stairs, furniture: facing it
             n += 1
             if n > limit:
                 raise Stuck(f"{self.g.room.id}: pressing {d} did not work at ({self.g.px:.2f},{self.g.py:.2f})")
@@ -165,8 +183,7 @@ class Pilot:
         if best is None:
             raise Stuck(f"{r.id}: nowhere to stand by {obj_cells}")
         self.walk_path(best[1])
-        for _ in range(6):   # bump gently into it to face it
-            self.tick(best[2])
+        self.face(best[2])
 
     def get_key(self):
         g = self.g
@@ -181,13 +198,11 @@ class Pilot:
                 cells = [(o.index + i, -1) for i in range(o.gx)]
                 stand = next(c for c in [(o.index + i, 0) for i in range(o.gx)] if c in r.flood((math.floor(g.px), math.floor(g.py))))
                 self.walk_path(stand)
-                for _ in range(6):
-                    self.tick((0, -1))
+                self.face((0, -1))
             elif o.side == "W":
                 stand = next(c for c in [(0, o.index + i) for i in range(o.gy)] if c in r.flood((math.floor(g.px), math.floor(g.py))))
                 self.walk_path(stand)
-                for _ in range(6):
-                    self.tick((-1, 0))
+                self.face((-1, 0))
             else:
                 self.stand_and_face(set(o.cells()))
             g.interact()
@@ -283,31 +298,81 @@ def walk_checks(g):
     g.enter_room("ballroom", None)
     g.enemies = []
     g.px, g.py, g.facing = 1.5, 2.5, "E"
-    before = sum(g.sounds.requested.get(f"step{i}", 0) for i in (1, 2, 3))
+    def nsteps():
+        return sum(g.sounds.requested.get(f"step{i}", 0) for i in (1, 2, 3))
+    before = nsteps()
     x0 = g.px
     for _ in range(60):
-        g.update(DT, auto=(1, 0))
+        g.update(DT, ctrl=(0, 1))
     walked = g.px - x0
-    steps = sum(g.sounds.requested.get(f"step{i}", 0) for i in (1, 2, 3)) - before
+    steps = nsteps() - before
     cyc = g.chars[g.character]["meta"]["cycle_tiles"]
-    expect = (G.WALK_START + walked / cyc) * 2 - G.WALK_START * 2
+    check(abs(walked - G.PLAYER_SPEED) < 0.05, f"Up walks forward along the facing (moved {walked:.2f} tiles east)")
     check(abs(steps - math.floor(G.WALK_START * 2 + walked / cyc * 2)) <= 1,
-          f"footsteps {steps} for {walked:.2f} tiles (cycle {cyc} tiles, expected ~{expect:.1f})")
+          f"footsteps {steps} for {walked:.2f} tiles (cycle {cyc} tiles)")
     img_walk, feet = g.walk_frame()
     check(g.moving and feet is not None, "walking shows a walk frame")
-    g.update(DT, auto=(0, 0))
+    g.update(DT, ctrl=(0, 0))
     img, feet = g.walk_frame()
     check(feet is None and img is g.chars[g.character]["stand"]["se"], "standing still shows the standing frame")
-    # blocked: pressing into a wall does not animate or step
+    # backwards: Down walks back along the facing, the cycle runs in reverse, steps still sound
+    x0, before = g.px, nsteps()
+    phases = []
+    for _ in range(30):
+        g.update(DT, ctrl=(0, -1))
+        phases.append(g.walk_phase)
+    back_steps = nsteps() - before
+    check(g.facing == "E" and g.px < x0 - 1.4, f"Down steps backwards without turning (facing {g.facing}, moved {g.px - x0:.2f})")
+    dec = sum(1 for a, b in zip(phases, phases[1:]) if (b - a) % 1.0 > 0.5)
+    check(dec >= len(phases) - 3, "walking backwards plays the walk cycle in reverse")
+    check(back_steps >= 2, f"footsteps when walking backwards ({back_steps})")
+    # turning: a quarter turn per press, clockwise for Right, TURN_S each; pose settles halfway
+    g.update(DT, ctrl=(0, 0))
+    order = []
+    t = 0.0
+    while len(order) < 4 and t < 2.0:
+        g.update(DT, ctrl=(1, 0))
+        t += DT
+        if not order or order[-1] != g.facing:
+            order.append(g.facing)
+    check(order == ["S", "W", "N", "E"], f"holding Right turns clockwise S, W, N, E (got {order})")
+    check(abs(t - 3 * G.TURN_S) < 0.1, f"held turns repeat every {G.TURN_S}s (4 facings reached in {t:.2f}s)")
+    while g.turning:
+        g.update(DT, ctrl=(0, 0))
+    g.update(DT, ctrl=(-1, 0))
+    check(g.facing == "N" and g.pose_facing() == "E", "Left turns anticlockwise; the sprite keeps the old facing at first")
+    for _ in range(int(G.TURN_S / 2 / DT) + 1):
+        g.update(DT, ctrl=(0, 0))
+    check(g.pose_facing() == "N", "half way through a turn the sprite settles on the new facing")
+    px0 = (g.px, g.py)
+    still = True
+    while g.turning:
+        g.update(DT, ctrl=(0, 1))
+        still = still and (not g.turning or (g.px, g.py) == px0)
+    check(still, "no walking while turning")
+    # a tap: one whole step; a tap during a turn is queued
+    g.facing = "E"
+    g.px, g.py = 2.5, 2.5
+    g.try_action(("step", 1))
+    for _ in range(60):
+        g.update(DT, ctrl=(0, 0))
+    check(abs(g.px - 2.5 - G.STEP_MIN) < 0.08, f"a tap of Up takes one step ({g.px - 2.5:.2f} tiles)")
+    g.try_action(("turn", 1))
+    g.try_action(("step", 1))
+    for _ in range(60):
+        g.update(DT, ctrl=(0, 0))
+    check(g.facing == "S" and g.py > 2.5 + G.STEP_MIN - 0.08, "a step tapped during a turn happens after it")
+    # blocked: walking into a wall does not animate or step
+    g.facing = "W"
     g.px, g.py = 0.3, 2.5
     ph = g.walk_phase
-    before = sum(g.sounds.requested.get(f"step{i}", 0) for i in (1, 2, 3))
+    before = nsteps()
     for _ in range(30):
-        g.update(DT, auto=(-1, 0))
-    after = sum(g.sounds.requested.get(f"step{i}", 0) for i in (1, 2, 3))
-    check(after == before and abs(g.walk_phase - ph) < 0.05, "walking into a wall should not move the legs or step")
+        g.update(DT, ctrl=(0, 1))
+    check(nsteps() == before and abs(g.walk_phase - ph) < 0.05, "walking into a wall should not move the legs or step")
     print(f"walk cycles: {', '.join(f'{c} {ch['meta']['cycle_tiles']:.2f} tiles' for c, ch in g.chars.items())}; "
-          f"worst planted-foot slide {worst:.2f} px/frame; {steps} footsteps over {walked:.2f} tiles")
+          f"worst planted-foot slide {worst:.2f} px/frame; {steps} footsteps over {walked:.2f} tiles; "
+          f"turns {G.TURN_S}s each")
 
 
 def main():

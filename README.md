@@ -13,7 +13,9 @@ The game is drawn at 1280 x 800 and the window can be resized. It uses pygame-ce
 
 ## How to play
 
-- **Arrow keys or WASD** walk. The mansion is drawn at an angle, so each key moves along the floor tiles: **Up** goes up-right, **Right** goes down-right, **Down** goes down-left, **Left** goes up-left.
+- **Left / Right (or A / D)** turn your character a quarter turn, the same as Daleks in Hedges. There are four ways to face, along the floor tiles: up-right, down-right, down-left and up-left. Hold the key to keep turning.
+- **Up / Down (or W / S)** walk forwards and backwards in the direction you are facing. A quick tap takes a single step. Walking backwards keeps you facing the same way, which helps you back away from a ghost.
+- You push furniture, climb stairs and search things by facing them.
 - Walk through a doorway to flip to the next room. Bump into **stairs** or a **ladder** to go up; walk onto **stairs down** or an open **trapdoor** to go down.
 - **Space or E** searches the furniture you are facing (wardrobes, bookcases, grandfather clocks, paintings, coffins...) or lifts a rug.
 - **Walk into** chairs, armchairs, chests, crates and the rocking horse to push them. The key might be underneath. Rooms tidy themselves when you leave, so you can never get stuck.
