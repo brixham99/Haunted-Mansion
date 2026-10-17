@@ -1,0 +1,2280 @@
+{
+ "game": "Haunted Mansion (working title)",
+ "resolution": [
+  1280,
+  800
+ ],
+ "tile_px": [
+  112,
+  56
+ ],
+ "wall_height_px": 230,
+ "character_height_px": 160,
+ "wall_art_px_per_tile": 62,
+ "style": "Painted, soft-shaded cartoon Halloween style matching Archie and Holly; rich but slightly muted colours, warm candlelight and cool moonlight; light from the upper left; transparent background (PNG with alpha), no drop shadow on the floor (the game adds one), no text.",
+ "how_to_add": "Save a transparent PNG as assets/art/<name>.png. Any size: it is cropped to its opaque area and scaled (furniture to the footprint width, enemies to the target height, wall art to the exact target box). Run the game; real art replaces the placeholder automatically.",
+ "sprites": [
+  {
+   "name": "grandfather_clock",
+   "file": "assets/art/grandfather_clock.png",
+   "kind": "furniture",
+   "description": "Tall Victorian longcase clock, dark mahogany, pale moon-faced dial, brass pendulum behind a glass door.",
+   "target_px": [
+    112,
+    271
+   ],
+   "paint_at_px": [
+    224,
+    542
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 3,
+   "rooms": [
+    "Entrance Hall",
+    "Landing",
+    "Staircase Hall"
+   ],
+   "placeholder": "assets/art_reference/grandfather_clock.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 215,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "search:behind"
+   ]
+  },
+  {
+   "name": "wardrobe",
+   "file": "assets/art/wardrobe.png",
+   "kind": "furniture",
+   "description": "Heavy double wardrobe, dark oak, carved cornice, two doors with brass handles, one door slightly ajar.",
+   "target_px": [
+    168,
+    309
+   ],
+   "paint_at_px": [
+    336,
+    618
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 5,
+   "rooms": [
+    "Dressing Room",
+    "Guest Bedroom",
+    "Lumber Room",
+    "Master Bedroom"
+   ],
+   "placeholder": "assets/art_reference/wardrobe.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     2
+    ]
+   },
+   "object_height_px": 225,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "search:in"
+   ]
+  },
+  {
+   "name": "bookcase",
+   "file": "assets/art/bookcase.png",
+   "kind": "furniture",
+   "description": "Floor-to-ceiling bookcase crammed with leather-bound books, a skull and a candle on one shelf, cobwebs in a corner.",
+   "target_px": [
+    168,
+    299
+   ],
+   "paint_at_px": [
+    336,
+    598
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 6,
+   "rooms": [
+    "Library",
+    "Study"
+   ],
+   "placeholder": "assets/art_reference/bookcase.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     2
+    ]
+   },
+   "object_height_px": 215,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "search:behind"
+   ]
+  },
+  {
+   "name": "chest_of_drawers",
+   "file": "assets/art/chest_of_drawers.png",
+   "kind": "furniture",
+   "description": "Bedroom chest of drawers, walnut, four drawers with brass knobs, a candle and a hand mirror on top.",
+   "target_px": [
+    168,
+    184
+   ],
+   "paint_at_px": [
+    336,
+    368
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 4,
+   "rooms": [
+    "Guest Bedroom",
+    "Master Bedroom",
+    "Servants' Quarters",
+    "Sewing Room"
+   ],
+   "placeholder": "assets/art_reference/chest_of_drawers.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     2
+    ]
+   },
+   "object_height_px": 100,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "search:in"
+   ]
+  },
+  {
+   "name": "kitchen_dresser",
+   "file": "assets/art/kitchen_dresser.png",
+   "kind": "furniture",
+   "description": "Welsh kitchen dresser, painted pale green and peeling, plates on the rack, cupboards below.",
+   "target_px": [
+    168,
+    289
+   ],
+   "paint_at_px": [
+    336,
+    578
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 2,
+   "rooms": [
+    "Dining Room",
+    "Kitchen"
+   ],
+   "placeholder": "assets/art_reference/kitchen_dresser.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     2
+    ]
+   },
+   "object_height_px": 205,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "search:in"
+   ]
+  },
+  {
+   "name": "fireplace",
+   "file": "assets/art/fireplace.png",
+   "kind": "furniture",
+   "description": "Marble fireplace with a black iron grate, faint green ghostly flames, candlesticks on the mantelpiece.",
+   "target_px": [
+    168,
+    249
+   ],
+   "paint_at_px": [
+    336,
+    498
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 2,
+   "rooms": [
+    "Dining Room",
+    "Drawing Room"
+   ],
+   "placeholder": "assets/art_reference/fireplace.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     2
+    ]
+   },
+   "object_height_px": 165,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "search:in",
+    "glows"
+   ]
+  },
+  {
+   "name": "piano",
+   "file": "assets/art/piano.png",
+   "kind": "furniture",
+   "description": "Upright piano, black lacquer, yellowed keys, sheet music and a candelabra on top.",
+   "target_px": [
+    168,
+    209
+   ],
+   "paint_at_px": [
+    336,
+    418
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 3,
+   "rooms": [
+    "Ballroom",
+    "Drawing Room",
+    "Music Room"
+   ],
+   "placeholder": "assets/art_reference/piano.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     2
+    ]
+   },
+   "object_height_px": 125,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "search:in"
+   ]
+  },
+  {
+   "name": "desk",
+   "file": "assets/art/desk.png",
+   "kind": "furniture",
+   "description": "Writing desk with green leather top, ink pot, quill and scattered letters, drawers below.",
+   "target_px": [
+    168,
+    164
+   ],
+   "paint_at_px": [
+    336,
+    328
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 2,
+   "rooms": [
+    "Library",
+    "Study"
+   ],
+   "placeholder": "assets/art_reference/desk.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     2
+    ]
+   },
+   "object_height_px": 80,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "search:in"
+   ]
+  },
+  {
+   "name": "wine_rack",
+   "file": "assets/art/wine_rack.png",
+   "kind": "furniture",
+   "description": "Wooden wine rack full of dusty bottles, cobwebs between the necks.",
+   "target_px": [
+    168,
+    279
+   ],
+   "paint_at_px": [
+    336,
+    558
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 3,
+   "rooms": [
+    "Wine Cellar"
+   ],
+   "placeholder": "assets/art_reference/wine_rack.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     2
+    ]
+   },
+   "object_height_px": 195,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "search:behind"
+   ]
+  },
+  {
+   "name": "barrel",
+   "file": "assets/art/barrel.png",
+   "kind": "furniture",
+   "description": "Oak wine barrel on its side on a cradle, iron hoops, a dripping tap.",
+   "target_px": [
+    112,
+    146
+   ],
+   "paint_at_px": [
+    224,
+    292
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 8,
+   "rooms": [
+    "Cellar Passage",
+    "Coal Cellar",
+    "Kitchen",
+    "Scullery",
+    "Water Tank Loft",
+    "Wine Cellar"
+   ],
+   "placeholder": "assets/art_reference/barrel.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 90,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "search:in"
+   ]
+  },
+  {
+   "name": "coffin",
+   "file": "assets/art/coffin.png",
+   "kind": "furniture",
+   "description": "Old wooden coffin with a slightly open lid, brass handles, cobwebs.",
+   "target_px": [
+    168,
+    144
+   ],
+   "paint_at_px": [
+    336,
+    288
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 3,
+   "rooms": [
+    "Crypt"
+   ],
+   "placeholder": "assets/art_reference/coffin.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 2,
+    "grid_when_facing_east": [
+     2,
+     1
+    ]
+   },
+   "object_height_px": 60,
+   "footprint_bottom_vertex_x_px": 112,
+   "gameplay": [
+    "solid",
+    "search:in"
+   ]
+  },
+  {
+   "name": "toy_box",
+   "file": "assets/art/toy_box.png",
+   "kind": "furniture",
+   "description": "Painted wooden toy box, lid ajar, a teddy's arm poking out.",
+   "target_px": [
+    112,
+    116
+   ],
+   "paint_at_px": [
+    224,
+    232
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 3,
+   "rooms": [
+    "Dusty Attic",
+    "Nursery"
+   ],
+   "placeholder": "assets/art_reference/toy_box.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 60,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "search:in"
+   ]
+  },
+  {
+   "name": "trunk",
+   "file": "assets/art/trunk.png",
+   "kind": "furniture",
+   "description": "Battered travel trunk with leather straps and faded shipping labels.",
+   "target_px": [
+    112,
+    121
+   ],
+   "paint_at_px": [
+    224,
+    242
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 7,
+   "rooms": [
+    "Dressing Room",
+    "Dusty Attic",
+    "Guest Bedroom",
+    "Linen Room",
+    "Loft Landing",
+    "Lumber Room",
+    "Study"
+   ],
+   "placeholder": "assets/art_reference/trunk.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 65,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "search:in"
+   ]
+  },
+  {
+   "name": "suit_of_armour",
+   "file": "assets/art/suit_of_armour.png",
+   "kind": "furniture",
+   "description": "Suit of armour on a plinth holding a halberd, visor down, a hint of red glow inside.",
+   "target_px": [
+    112,
+    256
+   ],
+   "paint_at_px": [
+    224,
+    512
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 7,
+   "rooms": [
+    "Billiard Room",
+    "East Corridor",
+    "Entrance Hall",
+    "Portrait Gallery",
+    "West Corridor"
+   ],
+   "placeholder": "assets/art_reference/suit_of_armour.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 200,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "search:in"
+   ]
+  },
+  {
+   "name": "linen_press",
+   "file": "assets/art/linen_press.png",
+   "kind": "furniture",
+   "description": "Tall linen press, painted cream, folded sheets visible through a cracked glass door.",
+   "target_px": [
+    168,
+    294
+   ],
+   "paint_at_px": [
+    336,
+    588
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 3,
+   "rooms": [
+    "Bathroom",
+    "Laundry",
+    "Linen Room"
+   ],
+   "placeholder": "assets/art_reference/linen_press.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     2
+    ]
+   },
+   "object_height_px": 210,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "search:in"
+   ]
+  },
+  {
+   "name": "bed",
+   "file": "assets/art/bed.png",
+   "kind": "furniture",
+   "description": "Four-poster bed with tattered dark-red curtains, rumpled sheets, pillows at the head (head end against the wall).",
+   "target_px": [
+    280,
+    295
+   ],
+   "paint_at_px": [
+    560,
+    590
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 3,
+   "rooms": [
+    "Guest Bedroom",
+    "Master Bedroom",
+    "Servants' Quarters"
+   ],
+   "placeholder": "assets/art_reference/bed.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 3,
+    "grid_when_facing_east": [
+     3,
+     2
+    ]
+   },
+   "object_height_px": 155,
+   "footprint_bottom_vertex_x_px": 168,
+   "gameplay": [
+    "solid",
+    "search:under"
+   ]
+  },
+  {
+   "name": "coal_heap",
+   "file": "assets/art/coal_heap.png",
+   "kind": "furniture",
+   "description": "Heap of coal against the wall with a shovel stuck in it.",
+   "target_px": [
+    224,
+    167
+   ],
+   "paint_at_px": [
+    448,
+    334
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 2,
+   "rooms": [
+    "Boiler Room",
+    "Coal Cellar"
+   ],
+   "placeholder": "assets/art_reference/coal_heap.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 2,
+    "grid_when_facing_east": [
+     2,
+     2
+    ]
+   },
+   "object_height_px": 55,
+   "footprint_bottom_vertex_x_px": 112,
+   "gameplay": [
+    "solid",
+    "search:in"
+   ]
+  },
+  {
+   "name": "cauldron",
+   "file": "assets/art/cauldron.png",
+   "kind": "furniture",
+   "description": "Black iron cauldron with green bubbling brew and a wooden ladle.",
+   "target_px": [
+    112,
+    131
+   ],
+   "paint_at_px": [
+    224,
+    262
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 1,
+   "rooms": [
+    "Kitchen"
+   ],
+   "placeholder": "assets/art_reference/cauldron.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 75,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "search:in",
+    "glows"
+   ]
+  },
+  {
+   "name": "chair",
+   "file": "assets/art/chair.png",
+   "kind": "furniture",
+   "description": "Dining chair, high carved back, faded velvet seat.",
+   "target_px": [
+    112,
+    156
+   ],
+   "paint_at_px": [
+    224,
+    312
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 22,
+   "rooms": [
+    "Ballroom",
+    "Bathroom",
+    "Billiard Room",
+    "Conservatory",
+    "Dining Room",
+    "Dressing Room",
+    "East Corridor",
+    "Lumber Room",
+    "Music Room",
+    "Nursery",
+    "Servants' Quarters",
+    "Sewing Room",
+    "Study",
+    "Upper Corridor",
+    "West Corridor"
+   ],
+   "placeholder": "assets/art_reference/chair.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 100,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "push"
+   ]
+  },
+  {
+   "name": "armchair",
+   "file": "assets/art/armchair.png",
+   "kind": "furniture",
+   "description": "Wingback armchair, worn green velvet, stuffing poking out of one arm.",
+   "target_px": [
+    112,
+    151
+   ],
+   "paint_at_px": [
+    224,
+    302
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 8,
+   "rooms": [
+    "Billiard Room",
+    "Drawing Room",
+    "Guest Bedroom",
+    "Library",
+    "Lumber Room",
+    "Master Bedroom",
+    "Study"
+   ],
+   "placeholder": "assets/art_reference/armchair.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 95,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "push"
+   ]
+  },
+  {
+   "name": "chest",
+   "file": "assets/art/chest.png",
+   "kind": "furniture",
+   "description": "Small iron-bound wooden chest on the floor (heavy, but can be pushed).",
+   "target_px": [
+    112,
+    116
+   ],
+   "paint_at_px": [
+    224,
+    232
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 4,
+   "rooms": [
+    "Conservatory",
+    "Dusty Attic",
+    "Laundry",
+    "Linen Room"
+   ],
+   "placeholder": "assets/art_reference/chest.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 60,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "push"
+   ]
+  },
+  {
+   "name": "crate",
+   "file": "assets/art/crate.png",
+   "kind": "furniture",
+   "description": "Wooden packing crate stencilled FRAGILE, nails sticking out.",
+   "target_px": [
+    112,
+    131
+   ],
+   "paint_at_px": [
+    224,
+    262
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 14,
+   "rooms": [
+    "Boiler Room",
+    "Cellar Passage",
+    "Coal Cellar",
+    "Dusty Attic",
+    "Loft Landing",
+    "Lumber Room",
+    "Scullery",
+    "Water Tank Loft",
+    "Wine Cellar"
+   ],
+   "placeholder": "assets/art_reference/crate.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 75,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "push"
+   ]
+  },
+  {
+   "name": "rocking_horse",
+   "file": "assets/art/rocking_horse.png",
+   "kind": "furniture",
+   "description": "Dappled rocking horse with a missing eye and a tatty mane.",
+   "target_px": [
+    112,
+    151
+   ],
+   "paint_at_px": [
+    224,
+    302
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 2,
+   "rooms": [
+    "Dusty Attic",
+    "Nursery"
+   ],
+   "placeholder": "assets/art_reference/rocking_horse.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 95,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "push"
+   ]
+  },
+  {
+   "name": "dining_table",
+   "file": "assets/art/dining_table.png",
+   "kind": "furniture",
+   "description": "Long dining table, white tablecloth with stains, candelabra, a rotting feast.",
+   "target_px": [
+    280,
+    210
+   ],
+   "paint_at_px": [
+    560,
+    420
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 1,
+   "rooms": [
+    "Dining Room"
+   ],
+   "placeholder": "assets/art_reference/dining_table.png",
+   "footprint_tiles": {
+    "width_along_front": 3,
+    "depth": 2,
+    "grid_when_facing_east": [
+     2,
+     3
+    ]
+   },
+   "object_height_px": 70,
+   "footprint_bottom_vertex_x_px": 112,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "round_table",
+   "file": "assets/art/round_table.png",
+   "kind": "furniture",
+   "description": "Small round side table with a lace cloth and a crystal ball.",
+   "target_px": [
+    112,
+    126
+   ],
+   "paint_at_px": [
+    224,
+    252
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 5,
+   "rooms": [
+    "Billiard Room",
+    "Conservatory",
+    "Drawing Room",
+    "East Corridor",
+    "Study"
+   ],
+   "placeholder": "assets/art_reference/round_table.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 70,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "kitchen_table",
+   "file": "assets/art/kitchen_table.png",
+   "kind": "furniture",
+   "description": "Scrubbed pine kitchen table, a cleaver, a pumpkin being carved.",
+   "target_px": [
+    224,
+    182
+   ],
+   "paint_at_px": [
+    448,
+    364
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 1,
+   "rooms": [
+    "Kitchen"
+   ],
+   "placeholder": "assets/art_reference/kitchen_table.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 2,
+    "grid_when_facing_east": [
+     2,
+     2
+    ]
+   },
+   "object_height_px": 70,
+   "footprint_bottom_vertex_x_px": 112,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "sofa",
+   "file": "assets/art/sofa.png",
+   "kind": "furniture",
+   "description": "Chesterfield sofa, cracked oxblood leather, a moth-eaten cushion.",
+   "target_px": [
+    168,
+    164
+   ],
+   "paint_at_px": [
+    336,
+    328
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 1,
+   "rooms": [
+    "Drawing Room"
+   ],
+   "placeholder": "assets/art_reference/sofa.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     2
+    ]
+   },
+   "object_height_px": 80,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "billiard_table",
+   "file": "assets/art/billiard_table.png",
+   "kind": "furniture",
+   "description": "Billiard table, green baize, balls mid-game, cues against it.",
+   "target_px": [
+    280,
+    210
+   ],
+   "paint_at_px": [
+    560,
+    420
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 1,
+   "rooms": [
+    "Billiard Room"
+   ],
+   "placeholder": "assets/art_reference/billiard_table.png",
+   "footprint_tiles": {
+    "width_along_front": 3,
+    "depth": 2,
+    "grid_when_facing_east": [
+     2,
+     3
+    ]
+   },
+   "object_height_px": 70,
+   "footprint_bottom_vertex_x_px": 112,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "range_cooker",
+   "file": "assets/art/range_cooker.png",
+   "kind": "furniture",
+   "description": "Black cast-iron kitchen range with ovens and a kettle on the hob.",
+   "target_px": [
+    168,
+    184
+   ],
+   "paint_at_px": [
+    336,
+    368
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 1,
+   "rooms": [
+    "Kitchen"
+   ],
+   "placeholder": "assets/art_reference/range_cooker.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     2
+    ]
+   },
+   "object_height_px": 100,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "sink",
+   "file": "assets/art/sink.png",
+   "kind": "furniture",
+   "description": "Butler's sink on brick legs, a dripping brass tap.",
+   "target_px": [
+    112,
+    141
+   ],
+   "paint_at_px": [
+    224,
+    282
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 2,
+   "rooms": [
+    "Kitchen",
+    "Scullery"
+   ],
+   "placeholder": "assets/art_reference/sink.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 85,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "boiler",
+   "file": "assets/art/boiler.png",
+   "kind": "furniture",
+   "description": "Huge riveted iron boiler with pipes, gauges and a glowing furnace door.",
+   "target_px": [
+    224,
+    322
+   ],
+   "paint_at_px": [
+    448,
+    644
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 1,
+   "rooms": [
+    "Boiler Room"
+   ],
+   "placeholder": "assets/art_reference/boiler.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 2,
+    "grid_when_facing_east": [
+     2,
+     2
+    ]
+   },
+   "object_height_px": 210,
+   "footprint_bottom_vertex_x_px": 112,
+   "gameplay": [
+    "solid",
+    "glows"
+   ]
+  },
+  {
+   "name": "water_tank",
+   "file": "assets/art/water_tank.png",
+   "kind": "furniture",
+   "description": "Galvanised loft water tank, rusty, a ladder up its side.",
+   "target_px": [
+    224,
+    277
+   ],
+   "paint_at_px": [
+    448,
+    554
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 1,
+   "rooms": [
+    "Water Tank Loft"
+   ],
+   "placeholder": "assets/art_reference/water_tank.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 2,
+    "grid_when_facing_east": [
+     2,
+     2
+    ]
+   },
+   "object_height_px": 165,
+   "footprint_bottom_vertex_x_px": 112,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "tomb",
+   "file": "assets/art/tomb.png",
+   "kind": "furniture",
+   "description": "Stone sarcophagus with a carved knight lying on the lid.",
+   "target_px": [
+    168,
+    164
+   ],
+   "paint_at_px": [
+    336,
+    328
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 1,
+   "rooms": [
+    "Crypt"
+   ],
+   "placeholder": "assets/art_reference/tomb.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 2,
+    "grid_when_facing_east": [
+     2,
+     1
+    ]
+   },
+   "object_height_px": 80,
+   "footprint_bottom_vertex_x_px": 112,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "mangle",
+   "file": "assets/art/mangle.png",
+   "kind": "furniture",
+   "description": "Cast-iron laundry mangle with wooden rollers and a big wheel.",
+   "target_px": [
+    112,
+    161
+   ],
+   "paint_at_px": [
+    224,
+    322
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 1,
+   "rooms": [
+    "Laundry"
+   ],
+   "placeholder": "assets/art_reference/mangle.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 105,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "washtub",
+   "file": "assets/art/washtub.png",
+   "kind": "furniture",
+   "description": "Zinc wash tub with a washboard and grey water.",
+   "target_px": [
+    112,
+    116
+   ],
+   "paint_at_px": [
+    224,
+    232
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 3,
+   "rooms": [
+    "Laundry",
+    "Scullery"
+   ],
+   "placeholder": "assets/art_reference/washtub.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 60,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "bath",
+   "file": "assets/art/bath.png",
+   "kind": "furniture",
+   "description": "Roll-top bath on claw feet, green slime in the bottom.",
+   "target_px": [
+    168,
+    154
+   ],
+   "paint_at_px": [
+    336,
+    308
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 1,
+   "rooms": [
+    "Bathroom"
+   ],
+   "placeholder": "assets/art_reference/bath.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     2
+    ]
+   },
+   "object_height_px": 70,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "washstand",
+   "file": "assets/art/washstand.png",
+   "kind": "furniture",
+   "description": "Marble-topped washstand with a jug and bowl.",
+   "target_px": [
+    112,
+    146
+   ],
+   "paint_at_px": [
+    224,
+    292
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 2,
+   "rooms": [
+    "Bathroom",
+    "Servants' Quarters"
+   ],
+   "placeholder": "assets/art_reference/washstand.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 90,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "cot",
+   "file": "assets/art/cot.png",
+   "kind": "furniture",
+   "description": "Victorian baby cot with white painted bars and a mobile of bats.",
+   "target_px": [
+    168,
+    224
+   ],
+   "paint_at_px": [
+    336,
+    448
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 1,
+   "rooms": [
+    "Nursery"
+   ],
+   "placeholder": "assets/art_reference/cot.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 2,
+    "grid_when_facing_east": [
+     2,
+     1
+    ]
+   },
+   "object_height_px": 140,
+   "footprint_bottom_vertex_x_px": 112,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "potted_palm",
+   "file": "assets/art/potted_palm.png",
+   "kind": "furniture",
+   "description": "Dead palm in a brass pot, brown drooping fronds.",
+   "target_px": [
+    112,
+    191
+   ],
+   "paint_at_px": [
+    224,
+    382
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 7,
+   "rooms": [
+    "Conservatory",
+    "East Corridor",
+    "Entrance Hall",
+    "Landing",
+    "Upper Corridor"
+   ],
+   "placeholder": "assets/art_reference/potted_palm.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 135,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "statue",
+   "file": "assets/art/statue.png",
+   "kind": "furniture",
+   "description": "Marble statue of a weeping angel on a plinth, covered in ivy.",
+   "target_px": [
+    112,
+    231
+   ],
+   "paint_at_px": [
+    224,
+    462
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 7,
+   "rooms": [
+    "Ballroom",
+    "Conservatory",
+    "Crypt",
+    "Landing",
+    "Portrait Gallery",
+    "Staircase Hall"
+   ],
+   "placeholder": "assets/art_reference/statue.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 175,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "candelabra",
+   "file": "assets/art/candelabra.png",
+   "kind": "furniture",
+   "description": "Tall iron floor candelabra with five dripping lit candles.",
+   "target_px": [
+    112,
+    196
+   ],
+   "paint_at_px": [
+    224,
+    392
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 11,
+   "rooms": [
+    "Ballroom",
+    "Cellar Passage",
+    "Crypt",
+    "Entrance Hall",
+    "Library",
+    "Master Bedroom",
+    "Music Room",
+    "Portrait Gallery",
+    "Staircase Hall"
+   ],
+   "placeholder": "assets/art_reference/candelabra.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 140,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "glows"
+   ]
+  },
+  {
+   "name": "pumpkin",
+   "file": "assets/art/pumpkin.png",
+   "kind": "furniture",
+   "description": "Carved jack-o'-lantern, grinning face lit from inside.",
+   "target_px": [
+    112,
+    106
+   ],
+   "paint_at_px": [
+    224,
+    212
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 2,
+   "rooms": [
+    "Entrance Hall",
+    "Kitchen"
+   ],
+   "placeholder": "assets/art_reference/pumpkin.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 50,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "glows"
+   ]
+  },
+  {
+   "name": "dummy",
+   "file": "assets/art/dummy.png",
+   "kind": "furniture",
+   "description": "Dressmaker's dummy on a stand, half-finished black gown, pins in it.",
+   "target_px": [
+    112,
+    206
+   ],
+   "paint_at_px": [
+    224,
+    412
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 4,
+   "rooms": [
+    "Dressing Room",
+    "Dusty Attic",
+    "Sewing Room"
+   ],
+   "placeholder": "assets/art_reference/dummy.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 150,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "harp",
+   "file": "assets/art/harp.png",
+   "kind": "furniture",
+   "description": "Gilded concert harp with several broken strings.",
+   "target_px": [
+    112,
+    221
+   ],
+   "paint_at_px": [
+    224,
+    442
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 2,
+   "rooms": [
+    "Ballroom",
+    "Music Room"
+   ],
+   "placeholder": "assets/art_reference/harp.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 165,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "sewing_machine",
+   "file": "assets/art/sewing_machine.png",
+   "kind": "furniture",
+   "description": "Treadle sewing machine on an iron stand.",
+   "target_px": [
+    112,
+    141
+   ],
+   "paint_at_px": [
+    224,
+    282
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 1,
+   "rooms": [
+    "Sewing Room"
+   ],
+   "placeholder": "assets/art_reference/sewing_machine.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 85,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "rug",
+   "file": "assets/art/rug.png",
+   "kind": "flat",
+   "description": "Persian rug, faded red and gold, frayed tassels (lies flat; the player can lift a corner).",
+   "target_px": [
+    224,
+    118
+   ],
+   "paint_at_px": [
+    448,
+    236
+   ],
+   "view": "Lies flat on the floor, same isometric view; footprint diamond fills the canvas width.",
+   "used": 5,
+   "rooms": [
+    "Drawing Room",
+    "Entrance Hall",
+    "Landing",
+    "Nursery",
+    "Staircase Hall"
+   ],
+   "placeholder": "assets/art_reference/rug.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 2,
+    "grid_when_facing_east": [
+     2,
+     2
+    ]
+   },
+   "object_height_px": 6,
+   "footprint_bottom_vertex_x_px": 112,
+   "gameplay": [
+    "lift"
+   ]
+  },
+  {
+   "name": "rug_lifted",
+   "file": "assets/art/rug_lifted.png",
+   "kind": "flat",
+   "description": "The same rug with one corner rolled back.",
+   "target_px": [
+    224,
+    134
+   ],
+   "paint_at_px": [
+    448,
+    268
+   ],
+   "view": "Lies flat on the floor, same isometric view; footprint diamond fills the canvas width.",
+   "used": 0,
+   "rooms": [],
+   "placeholder": "assets/art_reference/rug_lifted.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 2,
+    "grid_when_facing_east": [
+     2,
+     2
+    ]
+   },
+   "object_height_px": 22,
+   "footprint_bottom_vertex_x_px": 112,
+   "gameplay": []
+  },
+  {
+   "name": "painting",
+   "file": "assets/art/painting.png",
+   "kind": "wall",
+   "description": "Gilt-framed oil portrait of a stern Victorian gentleman whose eyes follow you. Flat front view, portrait 3:4.",
+   "target_px": [
+    62,
+    84
+   ],
+   "paint_at_px": [
+    124,
+    168
+   ],
+   "view": "FLAT FRONT VIEW (not isometric), as if photographed straight on. The game squeezes and shears it onto the wall.",
+   "used": 14,
+   "rooms": [
+    "Billiard Room",
+    "Dining Room",
+    "East Corridor",
+    "Entrance Hall",
+    "Guest Bedroom",
+    "Landing",
+    "Lumber Room",
+    "Nursery",
+    "Portrait Gallery",
+    "Staircase Hall",
+    "Study",
+    "Upper Corridor",
+    "West Corridor"
+   ],
+   "placeholder": "assets/art_reference/painting.png",
+   "span_tiles": 1,
+   "gameplay": [
+    "search:behind"
+   ]
+  },
+  {
+   "name": "painting_lady",
+   "file": "assets/art/painting_lady.png",
+   "kind": "wall",
+   "description": "Gilt-framed portrait of a pale lady in a black mourning dress. Flat front view, portrait 3:4.",
+   "target_px": [
+    62,
+    84
+   ],
+   "paint_at_px": [
+    124,
+    168
+   ],
+   "view": "FLAT FRONT VIEW (not isometric), as if photographed straight on. The game squeezes and shears it onto the wall.",
+   "used": 9,
+   "rooms": [
+    "Dining Room",
+    "Drawing Room",
+    "East Corridor",
+    "Landing",
+    "Master Bedroom",
+    "Music Room",
+    "Portrait Gallery",
+    "West Corridor"
+   ],
+   "placeholder": "assets/art_reference/painting_lady.png",
+   "span_tiles": 1,
+   "gameplay": [
+    "search:behind"
+   ]
+  },
+  {
+   "name": "painting_landscape",
+   "file": "assets/art/painting_landscape.png",
+   "kind": "wall",
+   "description": "Wide gilt-framed painting of this mansion on a hill at night under a full moon. Flat front view, landscape 2:1.",
+   "target_px": [
+    124,
+    70
+   ],
+   "paint_at_px": [
+    248,
+    140
+   ],
+   "view": "FLAT FRONT VIEW (not isometric), as if photographed straight on. The game squeezes and shears it onto the wall.",
+   "used": 4,
+   "rooms": [
+    "Billiard Room",
+    "Music Room",
+    "Portrait Gallery",
+    "Staircase Hall"
+   ],
+   "placeholder": "assets/art_reference/painting_landscape.png",
+   "span_tiles": 2,
+   "gameplay": [
+    "search:behind"
+   ]
+  },
+  {
+   "name": "mirror",
+   "file": "assets/art/mirror.png",
+   "kind": "wall",
+   "description": "Tarnished oval mirror in a black frame, a faint ghostly face in the glass. Flat front view.",
+   "target_px": [
+    62,
+    90
+   ],
+   "paint_at_px": [
+    124,
+    180
+   ],
+   "view": "FLAT FRONT VIEW (not isometric), as if photographed straight on. The game squeezes and shears it onto the wall.",
+   "used": 7,
+   "rooms": [
+    "Ballroom",
+    "Bathroom",
+    "Drawing Room",
+    "Dressing Room",
+    "Master Bedroom"
+   ],
+   "placeholder": "assets/art_reference/mirror.png",
+   "span_tiles": 1,
+   "gameplay": []
+  },
+  {
+   "name": "window",
+   "file": "assets/art/window.png",
+   "kind": "wall",
+   "description": "Tall arched leaded window, moonlight and bare branches outside, torn curtain. Flat front view.",
+   "target_px": [
+    62,
+    140
+   ],
+   "paint_at_px": [
+    124,
+    280
+   ],
+   "view": "FLAT FRONT VIEW (not isometric), as if photographed straight on. The game squeezes and shears it onto the wall.",
+   "used": 19,
+   "rooms": [
+    "Ballroom",
+    "Bathroom",
+    "Billiard Room",
+    "Conservatory",
+    "Drawing Room",
+    "Dusty Attic",
+    "Entrance Hall",
+    "Guest Bedroom",
+    "Kitchen",
+    "Master Bedroom",
+    "Nursery",
+    "Scullery",
+    "Servants' Quarters",
+    "Sewing Room",
+    "Study"
+   ],
+   "placeholder": "assets/art_reference/window.png",
+   "span_tiles": 1,
+   "gameplay": []
+  },
+  {
+   "name": "cobweb",
+   "file": "assets/art/cobweb.png",
+   "kind": "wall",
+   "description": "Big corner cobweb with a small spider. Flat front view, transparent background.",
+   "target_px": [
+    62,
+    62
+   ],
+   "paint_at_px": [
+    124,
+    124
+   ],
+   "view": "FLAT FRONT VIEW (not isometric), as if photographed straight on. The game squeezes and shears it onto the wall.",
+   "used": 10,
+   "rooms": [
+    "Cellar Passage",
+    "Coal Cellar",
+    "Crypt",
+    "Dusty Attic",
+    "East Corridor",
+    "Library",
+    "Loft Landing",
+    "Scullery",
+    "Upper Corridor",
+    "Water Tank Loft"
+   ],
+   "placeholder": "assets/art_reference/cobweb.png",
+   "span_tiles": 1,
+   "gameplay": []
+  },
+  {
+   "name": "front_door",
+   "file": "assets/art/front_door.png",
+   "kind": "wall",
+   "description": "Grand double front door, studded oak, iron hinges, big keyhole, fanlight above. Flat front view.",
+   "target_px": [
+    124,
+    185
+   ],
+   "paint_at_px": [
+    248,
+    370
+   ],
+   "view": "FLAT FRONT VIEW (not isometric), as if photographed straight on. The game squeezes and shears it onto the wall.",
+   "used": 1,
+   "rooms": [
+    "Entrance Hall"
+   ],
+   "placeholder": "assets/art_reference/front_door.png",
+   "span_tiles": 2,
+   "gameplay": []
+  },
+  {
+   "name": "door_frame",
+   "file": "assets/art/door_frame.png",
+   "kind": "wall",
+   "description": "Interior doorway frame: painted wooden architrave round a dark opening. Flat front view, centre transparent.",
+   "target_px": [
+    124,
+    185
+   ],
+   "paint_at_px": [
+    248,
+    370
+   ],
+   "view": "FLAT FRONT VIEW (not isometric), as if photographed straight on. The game squeezes and shears it onto the wall.",
+   "used": 0,
+   "rooms": [],
+   "placeholder": "assets/art_reference/door_frame.png",
+   "span_tiles": 2,
+   "gameplay": []
+  },
+  {
+   "name": "stairs_up",
+   "file": "assets/art/stairs_up.png",
+   "kind": "link",
+   "description": "Wooden staircase rising towards the back wall, carved banister (bump into it to go up).",
+   "target_px": [
+    224,
+    342
+   ],
+   "paint_at_px": [
+    448,
+    684
+   ],
+   "view": "Isometric, like furniture: front facing the lower right, back against the upper-left wall.",
+   "used": 3,
+   "rooms": [
+    "Cellar Passage",
+    "Linen Room",
+    "Staircase Hall"
+   ],
+   "placeholder": "assets/art_reference/stairs_up.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 2,
+    "grid_when_facing_east": [
+     2,
+     2
+    ]
+   },
+   "object_height_px": 230,
+   "footprint_bottom_vertex_x_px": 112,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "stairs_down",
+   "file": "assets/art/stairs_down.png",
+   "kind": "link",
+   "description": "Opening in the floor with stone steps going down into darkness, low railing (walk onto it to go down).",
+   "target_px": [
+    224,
+    118
+   ],
+   "paint_at_px": [
+    448,
+    236
+   ],
+   "view": "Isometric, like furniture: front facing the lower right, back against the upper-left wall.",
+   "used": 3,
+   "rooms": [
+    "Kitchen",
+    "Landing",
+    "Servants' Quarters"
+   ],
+   "placeholder": "assets/art_reference/stairs_down.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 2,
+    "grid_when_facing_east": [
+     2,
+     2
+    ]
+   },
+   "object_height_px": 6,
+   "footprint_bottom_vertex_x_px": 112,
+   "gameplay": []
+  },
+  {
+   "name": "ladder_up",
+   "file": "assets/art/ladder_up.png",
+   "kind": "link",
+   "description": "Wooden ladder against the wall up to a square loft hatch in the ceiling (bump into it to climb).",
+   "target_px": [
+    112,
+    286
+   ],
+   "paint_at_px": [
+    224,
+    572
+   ],
+   "view": "Isometric, like furniture: front facing the lower right, back against the upper-left wall.",
+   "used": 2,
+   "rooms": [
+    "Coal Cellar",
+    "Upper Corridor"
+   ],
+   "placeholder": "assets/art_reference/ladder_up.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 230,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid"
+   ]
+  },
+  {
+   "name": "trapdoor",
+   "file": "assets/art/trapdoor.png",
+   "kind": "link",
+   "description": "Open wooden trapdoor in the floor, a ladder going down into darkness (walk onto it to drop down).",
+   "target_px": [
+    112,
+    62
+   ],
+   "paint_at_px": [
+    224,
+    124
+   ],
+   "view": "Isometric, like furniture: front facing the lower right, back against the upper-left wall.",
+   "used": 2,
+   "rooms": [
+    "Loft Landing",
+    "Scullery"
+   ],
+   "placeholder": "assets/art_reference/trapdoor.png",
+   "footprint_tiles": {
+    "width_along_front": 1,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     1
+    ]
+   },
+   "object_height_px": 6,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": []
+  },
+  {
+   "name": "key",
+   "file": "assets/art/key.png",
+   "kind": "item",
+   "description": "Large ornate iron front door key with a skull bow, faint golden glint.",
+   "target_px": [
+    48,
+    50
+   ],
+   "paint_at_px": [
+    96,
+    100
+   ],
+   "view": "Small item, 3/4 view, centred.",
+   "used": 0,
+   "rooms": [],
+   "placeholder": "assets/art_reference/key.png",
+   "gameplay": [
+    "glows"
+   ]
+  },
+  {
+   "name": "ghost",
+   "file": "assets/art/ghost.png",
+   "kind": "enemy",
+   "description": "Floating Victorian ghost in a tattered white sheet, hollow black eyes, wispy tail instead of feet, semi-transparent.",
+   "target_px": [
+    100,
+    150
+   ],
+   "paint_at_px": [
+    200,
+    300
+   ],
+   "view": "Full figure, 3/4 view facing the viewer's lower RIGHT, feet (or lowest point) at the bottom of the canvas. The game mirrors it when the enemy moves left.",
+   "used": 15,
+   "rooms": [
+    "Ballroom",
+    "Bathroom",
+    "Crypt",
+    "Drawing Room",
+    "Dusty Attic",
+    "Landing",
+    "Laundry",
+    "Library",
+    "Master Bedroom",
+    "Music Room",
+    "Nursery",
+    "Portrait Gallery",
+    "Sewing Room",
+    "Staircase Hall"
+   ],
+   "placeholder": "assets/art_reference/ghost.png",
+   "gameplay": []
+  },
+  {
+   "name": "goblin",
+   "file": "assets/art/goblin.png",
+   "kind": "enemy",
+   "description": "Small green goblin with pointy ears, ragged brown tunic, toothy grin, holding a candle stub.",
+   "target_px": [
+    80,
+    105
+   ],
+   "paint_at_px": [
+    160,
+    210
+   ],
+   "view": "Full figure, 3/4 view facing the viewer's lower RIGHT, feet (or lowest point) at the bottom of the canvas. The game mirrors it when the enemy moves left.",
+   "used": 8,
+   "rooms": [
+    "Billiard Room",
+    "Conservatory",
+    "Dining Room",
+    "Guest Bedroom",
+    "Kitchen",
+    "Lumber Room",
+    "Study",
+    "West Corridor"
+   ],
+   "placeholder": "assets/art_reference/goblin.png",
+   "gameplay": []
+  },
+  {
+   "name": "bat",
+   "file": "assets/art/bat.png",
+   "kind": "enemy",
+   "description": "Black bat, wings spread, red eyes (flies at head height).",
+   "target_px": [
+    80,
+    60
+   ],
+   "paint_at_px": [
+    160,
+    120
+   ],
+   "view": "Full figure, 3/4 view facing the viewer's lower RIGHT, feet (or lowest point) at the bottom of the canvas. The game mirrors it when the enemy moves left.",
+   "used": 7,
+   "rooms": [
+    "Cellar Passage",
+    "Conservatory",
+    "Loft Landing",
+    "Nursery",
+    "Upper Corridor",
+    "Water Tank Loft",
+    "Wine Cellar"
+   ],
+   "placeholder": "assets/art_reference/bat.png",
+   "gameplay": []
+  },
+  {
+   "name": "spider",
+   "file": "assets/art/spider.png",
+   "kind": "enemy",
+   "description": "Big hairy black spider with red markings, eight legs, glinting eyes.",
+   "target_px": [
+    80,
+    70
+   ],
+   "paint_at_px": [
+    160,
+    140
+   ],
+   "view": "Full figure, 3/4 view facing the viewer's lower RIGHT, feet (or lowest point) at the bottom of the canvas. The game mirrors it when the enemy moves left.",
+   "used": 6,
+   "rooms": [
+    "Coal Cellar",
+    "Dusty Attic",
+    "Library",
+    "Linen Room",
+    "Scullery",
+    "Wine Cellar"
+   ],
+   "placeholder": "assets/art_reference/spider.png",
+   "gameplay": []
+  },
+  {
+   "name": "skeleton",
+   "file": "assets/art/skeleton.png",
+   "kind": "enemy",
+   "description": "Rattling skeleton in a tattered top hat, bony arms reaching forward.",
+   "target_px": [
+    80,
+    165
+   ],
+   "paint_at_px": [
+    160,
+    330
+   ],
+   "view": "Full figure, 3/4 view facing the viewer's lower RIGHT, feet (or lowest point) at the bottom of the canvas. The game mirrors it when the enemy moves left.",
+   "used": 6,
+   "rooms": [
+    "Billiard Room",
+    "Crypt",
+    "Dressing Room",
+    "East Corridor",
+    "Portrait Gallery",
+    "Servants' Quarters"
+   ],
+   "placeholder": "assets/art_reference/skeleton.png",
+   "gameplay": []
+  },
+  {
+   "name": "monster",
+   "file": "assets/art/monster.png",
+   "kind": "enemy",
+   "description": "Hulking Frankenstein-style monster, green-grey skin, neck bolts, stitched face, too-small black suit.",
+   "target_px": [
+    110,
+    190
+   ],
+   "paint_at_px": [
+    220,
+    380
+   ],
+   "view": "Full figure, 3/4 view facing the viewer's lower RIGHT, feet (or lowest point) at the bottom of the canvas. The game mirrors it when the enemy moves left.",
+   "used": 1,
+   "rooms": [
+    "Boiler Room"
+   ],
+   "placeholder": "assets/art_reference/monster.png",
+   "gameplay": []
+  }
+ ],
+ "characters": [
+  {
+   "name": "archie_se",
+   "file": "assets/characters/archie_se.png",
+   "status": "done (tools/make_sprites.py)"
+  },
+  {
+   "name": "archie_sw",
+   "file": "assets/characters/archie_sw.png",
+   "status": "done (tools/make_sprites.py)"
+  },
+  {
+   "name": "archie_ne",
+   "file": "assets/characters/archie_ne.png",
+   "status": "done (tools/make_sprites.py)"
+  },
+  {
+   "name": "archie_nw",
+   "file": "assets/characters/archie_nw.png",
+   "status": "done (tools/make_sprites.py)"
+  },
+  {
+   "name": "holly_se",
+   "file": "assets/characters/holly_se.png",
+   "status": "done (tools/make_sprites.py)"
+  },
+  {
+   "name": "holly_sw",
+   "file": "assets/characters/holly_sw.png",
+   "status": "done (tools/make_sprites.py)"
+  },
+  {
+   "name": "holly_ne",
+   "file": "assets/characters/holly_ne.png",
+   "status": "done (tools/make_sprites.py)"
+  },
+  {
+   "name": "holly_nw",
+   "file": "assets/characters/holly_nw.png",
+   "status": "done (tools/make_sprites.py)"
+  }
+ ]
+}
