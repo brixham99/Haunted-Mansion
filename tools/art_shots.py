@@ -28,7 +28,8 @@ ISO_ROOMS = [("dining", "dining_room", "archie"), ("kitchen", "kitchen", "holly"
              ("entrance_hall_clock_front_door", "entrance_hall", "archie"),
              ("master_bedroom_wardrobe", "master_bedroom", "holly"), ("nursery_rocking_horse", "nursery", "archie"),
              ("drawing_room_piano_armchair", "drawing_room", "holly"), ("laundry_linen_press", "laundry", "archie"),
-             ("staircase_hall_stairs", "staircase_hall", "holly"), ("coal_cellar_ladder", "coal_cellar", "archie")]
+             ("staircase_hall_stairs", "staircase_hall", "holly"), ("coal_cellar_ladder", "coal_cellar", "archie"),
+             ("boiler", "boiler_room", "archie"), ("pumpkin", "entrance_hall", "holly")]
 
 
 def main():

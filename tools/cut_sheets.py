@@ -15,7 +15,8 @@ placeholders.
   None in LAYOUT is an old version that a later sheet replaces: it is still
   found (so the rest of the sheet splits right) but not saved. furn1.jpg and
   the front-on pieces of furn2/3/4/7 are replaced by the corner views in
-  furn1_iso.jpg and furn8_iso.jpg.
+  furn1_iso.jpg and furn8_iso.jpg; the boiler and pumpkin by furn9_iso.jpg
+  and pumpkin_iso.jpg (the pumpkin on the left of furn9_iso is not used).
 - Edges: soft alpha from the distance to white, with the white unmixed from
   the edge colour (no white halo); specks are dropped.
 - Facing: the manifest wants furniture fronts towards the viewer's lower
@@ -48,9 +49,11 @@ LAYOUT = {
     "furn3.jpg": [["trunk", "suit_of_armour", None], ["bed", "coal_heap", "cauldron"]],   # linen_press: furn8_iso
     "furn4.jpg": [[None, None, "chest"], ["crate", None, "dining_table"]],                # chair, armchair, rocking_horse: furn8_iso
     "furn5.jpg": [["round_table", "kitchen_table", "sofa"], ["billiard_table", "range_cooker", "sink"]],
-    "furn6.jpg": [["boiler", "water_tank", "tomb"], ["mangle", "washtub", "bath"]],
-    "furn7.jpg": [["washstand", "cot", "potted_palm", "statue"], ["candelabra", "pumpkin", "dummy", None]],  # harp: furn8_iso
+    "furn6.jpg": [[None, "water_tank", "tomb"], ["mangle", "washtub", "bath"]],           # boiler: furn9_iso
+    "furn7.jpg": [["washstand", "cot", "potted_palm", "statue"], ["candelabra", None, "dummy", None]],  # harp: furn8_iso; pumpkin: pumpkin_iso
     "furn8_iso.jpg": [["piano", "linen_press", "chair"], ["armchair", "rocking_horse", "harp"]],
+    "furn9_iso.jpg": [[None, "boiler"]],          # the front-on pumpkin on the left is not used
+    "pumpkin_iso.jpg": [["pumpkin"]],
     "wall.jpg": [["painting", "painting_lady", "painting_landscape", "mirror", "window", "cobweb"],
                  ["key", "sewing_machine"]],
     "links.jpg": [["front_door", "door_frame", "stairs_up", "stairs_down", "ladder_up", "trapdoor"],
@@ -63,6 +66,8 @@ LAYOUT = {
 # Long pieces also have to lie along their footprint (bed, tables, bath, sofa).
 # The iso sheets (furn1_iso, furn8_iso) are all painted front to lower left
 # except the chair (seat already to the lower right) and the harp (symmetric).
+# furn9_iso: the boiler's furnace door faces lower left (mirrored); pumpkin_iso:
+# the face is already to the lower right (not mirrored).
 MIRROR = {"desk", "wine_rack", "toy_box", "trunk", "suit_of_armour", "bed",
           "chest", "dining_table", "sofa", "billiard_table", "range_cooker", "sink", "boiler", "bath",
           "washstand", "sewing_machine", "ladder_up", "goblin", "spider",
@@ -71,12 +76,15 @@ MIRROR = {"desk", "wine_rack", "toy_box", "trunk", "suit_of_armour", "bed",
 
 BG_T = 20                  # "white": max channel distance from 255
 HOLE_MAX, HOLE_FLAT = 40000, 0.6
+# Sheets whose white has more JPEG noise: the gaps between the boiler's pipes
+# and gauges (furn9_iso) are only ~53% within 5 of pure white.
+HOLE_FLAT_SHEET = {"furn9_iso.jpg": 0.45}
 SPECK = 40
 SOFT_LO, SOFT_HI = 8, 70
 HARMONISE = dict(saturation=1.06, contrast=1.04, brightness=1.06)
 
 
-def background(rgb):
+def background(rgb, flat=HOLE_FLAT):
     d = (255.0 - rgb).max(axis=2)
     white = d < BG_T
     m = Image.fromarray(np.pad(np.where(white, 255, 0).astype(np.uint8), 1, constant_values=255)).copy()
@@ -89,7 +97,7 @@ def background(rgb):
     for i in range(1, lab.max() + 1):
         comp = lab == i
         n = comp.sum()
-        if 12 <= n <= HOLE_MAX and (d[comp] < 5).mean() >= HOLE_FLAT:
+        if 12 <= n <= HOLE_MAX and (d[comp] < 5).mean() >= flat:
             bg |= comp
     return bg, d
 
@@ -299,7 +307,7 @@ def main(argv):
     made = {}
     for sheet, rows in LAYOUT.items():
         rgb = np.asarray(Image.open(os.path.join(SHEETS, sheet)).convert("RGB")).astype(np.float64)
-        bg, d = background(rgb)
+        bg, d = background(rgb, HOLE_FLAT_SHEET.get(sheet, HOLE_FLAT))
         fg = ~bg
         for name, box, mask in find_items(fg, rows):
             if name is None:
