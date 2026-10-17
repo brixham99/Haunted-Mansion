@@ -59,6 +59,10 @@ LAYOUT = {
     # rocking_horse and harp come from organic_iso.jpg (true corner views)
     "furn8_iso.jpg": [[None, None, None], [None, None, None]],
     "organic_iso.jpg": [["armchair", "chair", "harp", "rocking_horse"]],
+    # rear corner views, both facing the viewer's upper RIGHT (north): the
+    # backrest is on the near (lower-left) edge of the seat, the seat runs
+    # away to the upper right. See make_views() for the four facings.
+    "chairs_back_iso.jpg": [["chair_ne", "armchair_ne"]],
     "furn9_iso.jpg": [[None, "boiler"]],          # the front-on pumpkin on the left is not used
     "pumpkin_iso.jpg": [["pumpkin"]],
     "wall.jpg": [["painting", "painting_lady", "painting_landscape", "mirror", "window", "cobweb"],
@@ -87,7 +91,7 @@ BG_T = 20                  # "white": max channel distance from 255
 HOLE_MAX, HOLE_FLAT = 40000, 0.6
 # Sheets whose white has more JPEG noise: the gaps between the boiler's pipes
 # and gauges (furn9_iso) are only ~53% within 5 of pure white.
-HOLE_FLAT_SHEET = {"furn9_iso.jpg": 0.45, "organic_iso.jpg": 0.4}
+HOLE_FLAT_SHEET = {"furn9_iso.jpg": 0.45, "organic_iso.jpg": 0.4, "chairs_back_iso.jpg": 0.4}
 SPECK = 40
 SOFT_LO, SOFT_HI = 8, 70
 HARMONISE = dict(saturation=1.06, contrast=1.04, brightness=1.06)
@@ -268,7 +272,7 @@ def fix_ground_shadow(img, pockets=True):
 # White seen between closely spaced bars (harp strings, a pierced chair
 # back) is split into pockets too small to count as holes: key out pale,
 # neutral pixels on these pieces (none of them has white of its own).
-KEY_WHITE = {"harp": 228, "chair": 228}
+KEY_WHITE = {"harp": 228, "chair": 228, "chair_ne": 228}
 
 
 def key_white(img, thr):
@@ -355,9 +359,31 @@ def main(argv):
             img.save(os.path.join(OUT, name + ".png"))
             made[name] = img
             print(f"{name:20s} {img.width}x{img.height}  ({sheet})")
+    made.update(make_views())
     if review:
         contact(made, review)
     print(len(made), "sprites ->", OUT)
+
+
+# Chairs and armchairs have four facings (art.FOUR_WAY): <name>_se is the
+# front view (front to the lower right, = <name>.png), _sw its mirror, _ne
+# the rear view (front to the upper right), _nw its mirror.
+FOUR_WAY = ("chair", "armchair")
+
+
+def make_views():
+    out = {}
+    for n in FOUR_WAY:
+        front, back = os.path.join(OUT, n + ".png"), os.path.join(OUT, n + "_ne.png")
+        if not (os.path.exists(front) and os.path.exists(back)):
+            continue
+        f, b = Image.open(front).convert("RGBA"), Image.open(back).convert("RGBA")
+        views = {"se": f, "sw": f.transpose(Image.FLIP_LEFT_RIGHT), "ne": b, "nw": b.transpose(Image.FLIP_LEFT_RIGHT)}
+        for k, im in views.items():
+            if k != "ne":
+                im.save(os.path.join(OUT, f"{n}_{k}.png"))
+            out[f"{n}_{k}"] = im
+    return out
 
 
 def contact(made, path):

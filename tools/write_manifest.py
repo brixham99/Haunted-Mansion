@@ -81,6 +81,10 @@ def main():
         if t.get("glow"):
             flags.append("glows")
         entry["gameplay"] = flags
+        if name in art.FOUR_WAY:
+            entry["facings"] = {f: f"assets/art/{name}_{v}.png" for f, v in art.VIEW.items()}
+            entry["facings_note"] = ("One sprite per facing (front towards): E = lower right (front view, = the main file), "
+                                     "S = lower left (its mirror), N = upper right (rear view), W = upper left (its mirror).")
         sprites.append(entry)
         pygame.image.save(art.make_placeholder(name), os.path.join(ref_dir, name + ".png"))
     chars = [{"name": f"{c}_{k}", "file": f"assets/characters/{c}_{k}.png", "status": "done (tools/make_sprites.py)"}
@@ -134,6 +138,12 @@ def main():
             fps = f"{fp['width_along_front']} x {fp['depth']}" if fp else (f"{e['span_tiles']} tile wide" if "span_tiles" in e else "-")
             md.append(f"| `{e['name']}` | {fps} | {e['target_px'][0]} x {e['target_px'][1]} | "
                       f"{e['paint_at_px'][0]} x {e['paint_at_px'][1]} | {e['used']} | {e['description']} |")
+    md += ["", "## Four facings", "",
+           "Chairs and armchairs face any way (towards a table, desk or fireplace, or the middle of the room): "
+           + ", ".join(f"`{n}`" for n in sorted(art.FOUR_WAY)) + " each have `<name>_se.png` (front to the lower right, "
+           "the front view), `_sw` (its mirror), `_ne` (rear view, front to the upper right) and `_nw` (its mirror), "
+           "made by `tools/cut_sheets.py` from `organic_iso.jpg` and `chairs_back_iso.jpg`; all are fitted to the "
+           "footprint like the main file and grounded on its front corner."]
     md += ["", "## Characters (done)", "",
            "Archie and Holly, four facings each, in `assets/characters/`, built by `tools/make_sprites.py` from the "
            "high-resolution sources in `tools/art/` (160 px figures on a 168 px canvas).", ""]

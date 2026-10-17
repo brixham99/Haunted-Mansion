@@ -961,10 +961,22 @@ ISO_BOX_ART = {"fireplace", "kitchen_dresser", "chest_of_drawers", "bookcase", "
                "grandfather_clock", "linen_press", "desk", "toy_box"}
 
 
-def load_real(name):
-    """assets/art/<name>.png scaled to fit the target size (bottom-aligned
-    for furniture: width matched to the footprint), or None."""
-    path = os.path.join(ART_DIR, name + ".png")
+# Chairs and armchairs have a sprite per facing (front towards): E = lower
+# right (front view), S = lower left (its mirror), N = upper right (rear
+# view), W = upper left (its mirror). Files <name>_se/sw/ne/nw.png, made by
+# tools/cut_sheets.py; each is sized like <name>.png (width = footprint).
+FOUR_WAY = {"chair", "armchair"}
+VIEW = {"E": "se", "S": "sw", "N": "ne", "W": "nw"}
+# The rear views were painted a little squatter than the front views (a
+# wider seat for the same height): a touch larger, so the backrests come up
+# nearer the front view's height while the seat still fits its tile.
+VIEW_SCALE = {"chair_ne": 1.08, "chair_nw": 1.08, "armchair_ne": 1.08, "armchair_nw": 1.08}
+
+
+def load_real(name, file=None):
+    """assets/art/<file or name>.png scaled to fit the target size of `name`
+    (bottom-aligned for furniture: width matched to the footprint), or None."""
+    path = os.path.join(ART_DIR, (file or name) + ".png")
     if not os.path.exists(path):
         return None
     try:
@@ -976,7 +988,7 @@ def load_real(name):
     tw, th = target_size(name)
     kind = T[name]["kind"]
     if kind in ("furniture", "flat", "link"):
-        k = tw / img.get_width() * ART_SCALE.get(name, 1.0)   # footprint fixes the width
+        k = tw / img.get_width() * ART_SCALE.get(name, 1.0) * VIEW_SCALE.get(file, 1.0)   # footprint fixes the width
     elif kind == "wall":
         if name in ("front_door", "door_frame"):
             return pygame.transform.smoothscale(img, (tw, th))      # fills the doorway exactly
@@ -1050,7 +1062,21 @@ class Art:
         return ART_SCALE.get(name, 1.0) if name in self.real else 1.0
 
     def furniture(self, name, facing):
-        """Image for an object facing E (as drawn) or S (mirrored)."""
+        """Image for an object facing E (as drawn) or S (mirrored); chairs
+        and armchairs have their own image for each of the four facings."""
+        if name in FOUR_WAY:
+            key = (name, "view", facing)
+            if key not in self.cache:
+                img = load_real(name, f"{name}_{VIEW.get(facing, 'se')}")
+                if img is not None:
+                    self.real.add(name)
+                    self.cache[key] = img.convert_alpha() if pygame.display.get_surface() else img
+                else:      # no painted views: the old two-way mirror
+                    self.cache[key] = self._two_way(name, facing)
+            return self.cache[key]
+        return self._two_way(name, facing)
+
+    def _two_way(self, name, facing):
         flip = facing in ("S", "N")
         key = (name, flip)
         if key not in self.cache:

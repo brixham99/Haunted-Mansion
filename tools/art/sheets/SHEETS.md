@@ -19,3 +19,4 @@ faces2.jpg (4x3, 1280x720): flat elevations: bookcase front, oak side, wardrobe 
   -> fireplace, kitchen_dresser, chest_of_drawers, bookcase, wardrobe, piano, grandfather_clock, linen_press, desk, toy_box are BUILT by `python3 tools/iso_box.py --build` (exact 2:1 boxes), not cut; their furn1_iso/furn8_iso/furn2 versions are unused.
 organic_iso.jpg (4x1, 1280x720): armchair, chair, harp, rocking_horse  (corner views, front already to the lower right, not mirrored; replace the furn8_iso versions)
 coffin, tomb, cot (furn2/furn6/furn7) are now mirrored so their long side lies along the 2-tile (lower-left) edge of the footprint.
+chairs_back_iso.jpg (2x1, 1280x720): chair_ne, armchair_ne  (rear corner views: backrest on the near lower-left edge, seat running away to the upper right = facing N/upper right; not mirrored). cut_sheets.make_views() writes chair_/armchair_ se (front view, = chair.png/armchair.png), sw (mirror), ne (rear), nw (mirror).

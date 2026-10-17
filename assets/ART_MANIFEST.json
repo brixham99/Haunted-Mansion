@@ -677,7 +677,7 @@
     312
    ],
    "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
-   "used": 22,
+   "used": 26,
    "rooms": [
     "Ballroom",
     "Bathroom",
@@ -686,6 +686,7 @@
     "Dining Room",
     "Dressing Room",
     "East Corridor",
+    "Kitchen",
     "Lumber Room",
     "Music Room",
     "Nursery",
@@ -709,7 +710,14 @@
    "gameplay": [
     "solid",
     "push"
-   ]
+   ],
+   "facings": {
+    "E": "assets/art/chair_se.png",
+    "S": "assets/art/chair_sw.png",
+    "N": "assets/art/chair_ne.png",
+    "W": "assets/art/chair_nw.png"
+   },
+   "facings_note": "One sprite per facing (front towards): E = lower right (front view, = the main file), S = lower left (its mirror), N = upper right (rear view), W = upper left (its mirror)."
   },
   {
    "name": "armchair",
@@ -749,7 +757,14 @@
    "gameplay": [
     "solid",
     "push"
-   ]
+   ],
+   "facings": {
+    "E": "assets/art/armchair_se.png",
+    "S": "assets/art/armchair_sw.png",
+    "N": "assets/art/armchair_ne.png",
+    "W": "assets/art/armchair_nw.png"
+   },
+   "facings_note": "One sprite per facing (front towards): E = lower right (front view, = the main file), S = lower left (its mirror), N = upper right (rear view), W = upper left (its mirror)."
   },
   {
    "name": "chest",
