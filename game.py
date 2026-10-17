@@ -29,6 +29,7 @@ import pygame
 
 import art
 import mansion as M
+import scores
 from objects import (T, TILE_W, TILE_H, WALL_H, DOOR_H, ENEMY_STATS, SEARCH_LINES, SEARCH_PHRASE, nice)
 
 WIN_W, WIN_H = 1280, 800
@@ -45,6 +46,14 @@ ENTRY_GRACE = 0.9              # s enemies wait when you come into a room
 INVULN = 2.2                   # s after losing a life
 LIVES = 3
 MSG_TIME = 3.2
+# Scoring
+PTS_MOVE = 1                   # per whole second spent actually walking (forwards or back)
+PTS_ROOM = 5                   # the first time each room is entered in a run (not the starting room)
+PTS_KEY = 50                   # picking up the front door key
+PTS_ESCAPE = 200               # out through the front door
+POPUP_TIME = 1.3               # s a "+5" floats above the player
+TOP10_TIME = 7.0               # s the title screen shows the controls, then the Top 10, in turn
+BOARD_REFRESH = 3600.0         # re-fetch the Top 10 (and retry unsent scores) hourly
 TITLE_NAME = "Haunted Mansion"
 COPYRIGHT = "\u00a92026 Nathan, Archie & Holly Anderson. Working title."
 
@@ -219,7 +228,8 @@ def depth_sort(items):
 
 
 class Game:
-    def __init__(self, screen, seed=None, character="archie", enemies=True, god=False, save=True, title=True):
+    def __init__(self, screen, seed=None, character="archie", enemies=True, god=False, save=True, title=True,
+                 online=None, scores_file=None):
         self.screen = screen
         self.seed = seed if seed is not None else int(time.time() * 1000) % 1_000_000
         self.character = character
@@ -242,6 +252,18 @@ class Game:
         self.title_pick = CHAR_ORDER.index(character)
         self.best = self._load_best()
         self.new_best = False
+        # High scores: online only when saving (headless tests never touch the network or the file)
+        online = save if online is None else online
+        self.board = scores.Leaderboard(online=online, **({"path": scores_file} if scores_file else {}))
+        self.flags = scores.Flags(download=online)
+        self.board.refresh()
+        self.board_t = 0.0
+        self.show_top10 = False            # debug: keep the Top 10 on the title screen
+        self.entry_active = False
+        self.entry_name = ""
+        self.entry_note = ""
+        self.new_high = False
+        self.best_score = self.board.high_score()
         self.killer = None
         self.bg_cache = {}
         self.dark_cache = {}
@@ -287,6 +309,11 @@ class Game:
             self.key_pos = (self.key_place[2][0] + 0.5, self.key_place[2][1] + 0.5)
         self.lives = LIVES
         self.time = 0.0
+        self.score = 0
+        self.move_acc = 0.0               # seconds of walking not yet paid out as points
+        self.popups = []                  # [text, x, y, age] floating "+5"s (world position)
+        self.scoring = False              # the starting room is discovered for nothing
+        self.qualified = False
         self.visited = set()
         self.msg = None
         self.msg_t = 0.0
@@ -315,6 +342,7 @@ class Game:
         self.step_sign = 0
         self.walk_phase = WALK_START   # walk cycle position (0..1), advanced by distance walked
         self.enter_room(start_room, None)
+        self.scoring = True
         if start_room == M.START_ROOM:
             r = self.room
             self.px, self.py = r.w / 2.0, r.d - 1.5
@@ -328,6 +356,7 @@ class Game:
         r.reset_pushables()
         for o in r.objs:
             o.slide_t = 0.0
+        first = rid not in self.visited
         self.visited.add(rid)
         if facing:
             self.facing = facing
@@ -351,6 +380,14 @@ class Game:
         self.step_left = 0.0
         self.queued = None
         self.searching = None
+        if first and self.scoring:
+            self.add_points(PTS_ROOM)
+
+    def add_points(self, n, popup=True):
+        """Score n points; a floating "+n" over the player for the bonuses."""
+        self.score += n
+        if popup:
+            self.popups.append([f"+{n}", self.px, self.py, 0.0])
 
     def spawn_enemies(self):
         r = self.room
@@ -387,6 +424,9 @@ class Game:
 
     # ------------------------------------------------------------ input
     def on_key(self, key):
+        if self.entry_active:
+            self.entry_key(key)
+            return
         if self.mode == "title":
             if key in (pygame.K_LEFT, pygame.K_a, pygame.K_1):
                 self.title_pick = 0
@@ -408,6 +448,69 @@ class Game:
         elif (key in TURN_KEYS or key in MOVE_KEYS) and not self.show_map and not self.paused:
             action = ("turn", TURN_KEYS[key]) if key in TURN_KEYS else ("step", MOVE_KEYS[key])
             self.try_action(action)
+
+    # ------------------------------------------------------------ name entry (as Dinosaur vs Bees)
+    def entry_text(self, text):
+        if not self.entry_active:
+            return
+        for ch in text:
+            if ch.isascii() and (ch.isalnum() or ch == " ") and len(self.entry_name) < scores.NAME_MAX:
+                if ch == " " and (not self.entry_name or self.entry_name.endswith(" ")):
+                    continue
+                self.entry_name += ch
+
+    def entry_key(self, key):
+        if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+            name = scores.clean_name(self.entry_name)
+            if not name:
+                return          # type a name first (Esc skips)
+            self.entry_active = False
+            self.entry_note = name
+            self.board.submit(name, self.score)
+            self.end_t = min(self.end_t, 0.5)
+            self._stop_text()
+        elif key == pygame.K_ESCAPE:
+            self.entry_active = False
+            self.entry_note = ""
+            self._stop_text()
+        elif key == pygame.K_BACKSPACE:
+            self.entry_name = self.entry_name[:-1]
+
+    @staticmethod
+    def _stop_text():
+        try:
+            pygame.key.stop_text_input()
+        except Exception:
+            pass
+
+    def entry_status(self):
+        """End-screen line about the Top 10 once the name step is over."""
+        name = self.entry_note
+        if self.score <= 0:
+            return ""
+        if not name:
+            return "Score not sent" if self.qualified else ""
+        if not self.board.online:
+            return f"Saved as {name}"
+        if (name, self.score) in self.board.pending:
+            return f"Sending as {name}\u2026" if self.board.busy else "Offline \u2013 will send later"
+        return f"Score sent as {name}"
+
+    def end_scores(self):
+        """At the end of a run: best score, and the name prompt if it makes the Top 10."""
+        prev = max(self.best_score, self.board.high_score())
+        self.new_high = self.score > prev
+        self.best_score = max(prev, self.score)
+        self.qualified = self.board.qualifies(self.score)
+        self.board.record_local(self.score)
+        self.entry_note = ""
+        self.entry_active = self.qualified
+        if self.entry_active:
+            self.entry_name = self.board.last_name
+            try:
+                pygame.key.start_text_input()
+            except Exception:
+                pass
 
     # --------------------------------------------------- tank controls (as Daleks in Hedges)
     def busy(self):
@@ -482,8 +585,12 @@ class Game:
         self.say("Find the front door key, then escape through the front door!")
 
     def to_title(self):
+        if self.entry_active:
+            self.entry_active = False
+            self._stop_text()
         self.mode = "title"
         self.title_t = 0.0
+        self.board.refresh()
         self.show_map = False
         self.paused = False
         self.sounds.loop("title_theme")
@@ -578,6 +685,13 @@ class Game:
     def update(self, dt, keys=None, auto=None, ctrl=None):
         """keys: held keys (tank controls); ctrl: (turn, move) directly;
         auto: a world direction, steered to with the tank controls."""
+        self.board_t += dt
+        if self.board_t > BOARD_REFRESH:
+            self.board_t = 0.0
+            self.board.refresh()
+        for p in self.popups:
+            p[3] += dt
+        self.popups = [p for p in self.popups if p[3] < POPUP_TIME]
         if self.mode == "title":
             self.title_t += dt
             return
@@ -645,6 +759,12 @@ class Game:
             bumped = self.move_player(dx, dy, dt)
             dist = math.hypot(self.px - ox, self.py - oy)
             self.advance_walk(dist * sign)          # backwards plays the cycle in reverse
+            if dist > 1e-6:                         # actually walking, not shoving a wall
+                self.move_acc += dt
+                whole = int(self.move_acc + 1e-9)   # 60 x (1/60 s) is a whole second
+                if whole:
+                    self.move_acc -= whole
+                    self.add_points(whole * PTS_MOVE, popup=False)
             if self.step_left > 0:
                 self.step_left = 0.0 if dist < 1e-4 else max(0.0, self.step_left - dist)
                 if self.step_left <= 0:
@@ -787,6 +907,7 @@ class Game:
         if self.key_state == "hidden" and self.key_place[:3] == (r.id, "search", o.id):
             self.key_state = "carried"
             self.sounds.play("key_found")
+            self.add_points(PTS_KEY)
             how = SEARCH_PHRASE[o.t["search"]].format(n=nice(o.type))
             self.say(f"You found the front door key {how}!")
             return
@@ -811,6 +932,7 @@ class Game:
         if abs(self.px - kx) < 0.55 and abs(self.py - ky) < 0.55:
             self.key_state = "carried"
             self.sounds.play("key_found")
+            self.add_points(PTS_KEY)
             self.say("You picked up the front door key! Back to the Entrance Hall!")
 
     def check_exits(self):
@@ -945,6 +1067,7 @@ class Game:
 
     def win(self):
         self.won = True
+        self.add_points(PTS_ESCAPE)
         self.mode = "end"
         self.end_t = 0.0
         self.sounds.play("unlock")
@@ -954,6 +1077,7 @@ class Game:
         if self.new_best:
             self.best = self.time
             self._save_best(self.time)
+        self.end_scores()
 
     def lose(self, e):
         self.lost = True
@@ -962,6 +1086,7 @@ class Game:
         self.killer = e.kind
         self.sounds.play("gameover")
         self.sounds.loop(None)
+        self.end_scores()
 
     # ================================================================ drawing
     def build_background(self, r):
@@ -1227,6 +1352,7 @@ class Game:
             gs = self.glow_sprite((255, 220, 110), 40)
             kx, ky = self.P(*self.key_pos, 20)
             s.blit(gs, (kx - 40, ky - 40), special_flags=pygame.BLEND_RGB_ADD)
+        self.draw_popups()
         self.draw_hud()
         if self.show_map:
             self.draw_map()
@@ -1339,6 +1465,16 @@ class Game:
             fx, fy = x0 + f["x"], y0 + f["y"] + lift
             s.blit(sh, (fx - sh.get_width() / 2, fy - sh.get_height() / 2 - 1))
 
+    def draw_popups(self):
+        """Floating "+5" / "+50" / "+200" over the player's head, rising and fading."""
+        for txt, x, y, age in self.popups:
+            k = age / POPUP_TIME
+            big = txt != f"+{PTS_ROOM}"
+            img = self.text(self.f_sub if big else self.f_hud, txt, (255, 210, 80)).copy()
+            img.set_alpha(int(255 * min(1.0, (1 - k) / 0.35)))
+            px, py = self.P(x, y, 178 + 46 * k)
+            self.screen.blit(img, (round(px - img.get_width() / 2), round(py - img.get_height())))
+
     # ------------------------------------------------------------ HUD
     def draw_hud(self):
         s = self.screen
@@ -1350,6 +1486,7 @@ class Game:
         x = 18 + self.f_hud.size("Lives:")[0] + 22
         for i in range(LIVES):
             self.heart(s, x + i * 32, 26, (230, 50, 60) if i < self.lives else (70, 50, 56))
+        s.blit(self.text(self.f_hud, f"Score: {self.score:,}", (255, 200, 120)), (x + LIVES * 32 + 30, 14))
         r = self.room
         name = self.text(self.f_hud, r.name, (255, 236, 190))
         fl = self.text(self.f_hud_small, M.FLOOR_NAMES[r.floor], (200, 170, 130))
@@ -1448,21 +1585,46 @@ class Game:
         veil.fill((4, 2, 8, int(min(1.0, self.end_t / 0.6) * 205)))
         s.blit(veil, (0, 0))
         n_rooms = len(self.house.rooms)
+        if self.new_high:
+            best = (self.f_sub, f"Score: {self.score:,}      A new best score!", (255, 210, 120))
+        else:
+            best = (self.f_sub, f"Score: {self.score:,}      Best: {self.best_score:,}", (255, 210, 120))
         if self.won:
             lines = [(self.f_big, "You escaped!", (255, 190, 80)),
                      (self.f_sub, f"Time taken: {fmt_time(self.time)}", (255, 236, 190)),
                      (self.f_help, f"Lives left: {self.lives}      Rooms explored: {len(self.visited)} of {n_rooms}", (230, 214, 180)),
-                     (self.f_help, "A new best time!" if self.new_best else f"Best time: {fmt_time(self.best)}", (255, 210, 120))]
+                     (self.f_help, "A new best time!" if self.new_best else f"Best time: {fmt_time(self.best)}", (255, 210, 120)),
+                     best]
         else:
             lines = [(self.f_big, "Game over", (230, 70, 60)),
                      (self.f_sub, f"The {self.killer} got you. The mansion keeps you for ever...", (255, 236, 190)),
                      (self.f_help, f"The key was {self.key_where()}.", (230, 214, 180)),
-                     (self.f_help, f"Time: {fmt_time(self.time)}      Rooms explored: {len(self.visited)} of {n_rooms}", (230, 214, 180))]
-        y = 230
+                     (self.f_help, f"Time: {fmt_time(self.time)}      Rooms explored: {len(self.visited)} of {n_rooms}", (230, 214, 180)),
+                     best]
+        y = 190
         for font, txt, col in lines:
             im = self.text(font, txt, col)
             s.blit(im, ((WIN_W - im.get_width()) / 2, y))
             y += im.get_height() + 26
+        y += 4
+        if self.entry_active:
+            pw, ph = 560, 150
+            panel = pygame.Surface((pw, ph), pygame.SRCALPHA)
+            panel.fill((10, 6, 14, 225))
+            pygame.draw.rect(panel, (230, 130, 40), panel.get_rect(), 2, border_radius=6)
+            s.blit(panel, ((WIN_W - pw) / 2, y))
+            im = self.text(self.f_help, "You're in the Top 10! Type your name:", (255, 236, 190))
+            s.blit(im, ((WIN_W - im.get_width()) / 2, y + 14))
+            caret = "_" if int(self.end_t * 2.5) % 2 == 0 else " "
+            im = self.text(self.f_big, (self.entry_name + caret) if (self.entry_name or caret != " ") else " ", (255, 190, 80))
+            s.blit(im, ((WIN_W - im.get_width()) / 2, y + 40))
+            im = self.text(self.f_small, f"Up to {scores.NAME_MAX} letters or numbers      Enter: send      Esc: skip", (200, 180, 150))
+            s.blit(im, ((WIN_W - im.get_width()) / 2, y + ph - 28))
+            return
+        note = self.entry_status()
+        if note:
+            im = self.text(self.f_help, note, (190, 215, 255))
+            s.blit(im, ((WIN_W - im.get_width()) / 2, y))
         if self.end_t > 1.0:
             im = self.text(self.f_help, "Press Enter to return to the title screen", (200, 180, 150))
             s.blit(im, ((WIN_W - im.get_width()) / 2, WIN_H - 120))
@@ -1564,11 +1726,64 @@ class Game:
             if sel:
                 mk = self.text(self.f_small, "SELECTED", (255, 170, 60))
                 s.blit(mk, (bx + (bw - mk.get_width()) / 2, by - 24))
+        if self.show_top10 or int(self.title_t / TOP10_TIME) % 2 == 1:
+            self.draw_top10()
+        else:
+            self.draw_controls()
+        cp = self.text(self.f_small, COPYRIGHT, (190, 170, 150))
+        s.blit(cp, ((WIN_W - cp.get_width()) / 2, WIN_H - 28))
+
+    def best_line(self):
+        self.best_score = max(self.best_score, self.board.high_score())
+        bits = []
+        if self.best_score:
+            bits.append(f"Best score: {self.best_score:,}")
+        if self.best is not None:
+            bits.append(f"Best time: {fmt_time(self.best)}")
+        return "      ".join(bits)
+
+    def draw_top10(self):
+        """The shared Top 10 (two columns of five) in place of the controls panel."""
+        s = self.screen
+        pw, ph, py = 960, 210, 524
+        px = (WIN_W - pw) / 2
+        panel = pygame.Surface((pw, ph), pygame.SRCALPHA)
+        panel.fill((8, 4, 12, 190))
+        pygame.draw.rect(panel, (150, 90, 40, 220), panel.get_rect(), 1, border_radius=6)
+        s.blit(panel, (px, py))
+        hd = self.text(self.f_sub, "Top 10 Scores", (255, 170, 60))
+        s.blit(hd, ((WIN_W - hd.get_width()) / 2, py + 8))
+        rows = self.board.top(scores.TOP_N)
+        if not rows:
+            msg = {"loading": "Fetching the scores\u2026", "offline": "Scores unavailable offline"}.get(
+                self.board.status, "No scores yet \u2013 be the first!")
+            im = self.text(self.f_help, msg, (235, 220, 190))
+            s.blit(im, ((WIN_W - im.get_width()) / 2, py + 96))
+        for i, (name, score, country) in enumerate(rows):
+            col_x = px + (60 if i < 5 else pw / 2 + 30)
+            y = py + 54 + (i % 5) * 28
+            colour = (255, 200, 90) if i == 0 else (235, 220, 190)
+            num = self.text(self.f_help, f"{i + 1}.", colour)
+            s.blit(num, (col_x + 34 - num.get_width(), y))
+            flag = self.flags.get(country) if country else None
+            if flag:
+                s.blit(flag, (col_x + 46, y + 5))
+            s.blit(self.text(self.f_help, name, colour), (col_x + 84, y))
+            sc = self.text(self.f_help, f"{score:,}", colour)
+            s.blit(sc, (col_x + 380 - sc.get_width(), y))
+        bl = self.best_line()
+        if bl:
+            im = self.text(self.f_small, bl, (255, 200, 110))
+            s.blit(im, ((WIN_W - im.get_width()) / 2, py + ph - 24))
+
+    def draw_controls(self):
+        s = self.screen
         lines = ["Left / Right (or 1 / 2): choose character      Enter / Space: start",
                  "Left / Right (A / D): turn      Up / Down (W / S): walk forwards / backwards",
                  "Space / E: search or lift      Walk into chairs, chests and crates to push them",
                  "Tab / M: map      P: pause      Esc: title screen"]
-        ph = 30 * len(lines) + (34 if self.best is not None else 0) + 14
+        bl = self.best_line()
+        ph = 30 * len(lines) + (34 if bl else 0) + 14
         panel = pygame.Surface((960, ph), pygame.SRCALPHA)
         panel.fill((8, 4, 12, 170))
         pygame.draw.rect(panel, (120, 70, 40, 200), panel.get_rect(), 1, border_radius=6)
@@ -1578,11 +1793,9 @@ class Game:
             im = self.text(self.f_help, ln, (235, 220, 190))
             s.blit(im, ((WIN_W - im.get_width()) / 2, y))
             y += 30
-        if self.best is not None:
-            im = self.text(self.f_help, f"Best time: {fmt_time(self.best)}", (255, 200, 110))
+        if bl:
+            im = self.text(self.f_help, bl, (255, 200, 110))
             s.blit(im, ((WIN_W - im.get_width()) / 2, y + 2))
-        cp = self.text(self.f_small, COPYRIGHT, (190, 170, 150))
-        s.blit(cp, ((WIN_W - cp.get_width()) / 2, WIN_H - 28))
 
 
 # ===================================================================== main
@@ -1598,6 +1811,10 @@ def parse_args(argv):
     p.add_argument("--pos", default=None, help="debug: player position x,y in the room")
     p.add_argument("--facing", default=None, choices=("N", "E", "S", "W"))
     p.add_argument("--sim", type=float, default=1.2, help="debug: seconds to simulate before the screenshot")
+    p.add_argument("--offline", action="store_true", help="no online high scores (local file only)")
+    p.add_argument("--scores-file", default=None, help="debug: high score file instead of ~/.haunted_mansion/scores.json")
+    p.add_argument("--show-top10", action="store_true", help="debug: keep the Top 10 on the title screen")
+    p.add_argument("--score", type=int, default=None, help="debug: score for the scene (e.g. win/lose name entry)")
     return p.parse_args(argv)
 
 
@@ -1616,7 +1833,9 @@ def main(argv=None):
     except pygame.error:
         window = pygame.display.set_mode((WIN_W, WIN_H))
     game = Game(window, seed=args.seed, character=args.character, enemies=not args.no_enemies,
-                save=not headless, title=args.scene in (None, "title") and args.room is None)
+                save=not headless, title=args.scene in (None, "title") and args.room is None,
+                online=not (headless or args.offline), scores_file=args.scores_file)
+    game.show_top10 = args.show_top10
     if args.room:
         game.mode = "play"
         game.enter_room(args.room, None)
@@ -1637,9 +1856,13 @@ def main(argv=None):
                 for rid in list(game.house.rooms)[::2]:
                     game.visited.add(rid)
                 game.show_map = True
-            elif args.scene == "win":
+            if args.score is not None:
+                game.score = args.score
+            if args.scene == "win":
                 game.key_state = "carried"
                 game.time = 263.0
+                if args.score is not None:
+                    game.score -= PTS_ESCAPE
                 game.win()
                 game.end_t = 2.0
             elif args.scene == "lose":
@@ -1658,8 +1881,12 @@ def main(argv=None):
         for ev in pygame.event.get():
             if ev.type == pygame.QUIT:
                 running = False
+            elif ev.type == pygame.TEXTINPUT:
+                game.entry_text(ev.text)
             elif ev.type == pygame.KEYDOWN:
-                if ev.key == pygame.K_ESCAPE:
+                if game.entry_active:
+                    game.entry_key(ev.key)
+                elif ev.key == pygame.K_ESCAPE:
                     if game.mode == "title":
                         running = False
                     elif game.show_map:

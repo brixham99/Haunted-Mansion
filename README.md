@@ -23,6 +23,14 @@ The game is drawn at 1280 x 800 and the window can be resized. It uses pygame-ce
 - Ghosts and bats float through furniture; goblins, spiders, skeletons and the monster walk round it. If one touches you, you lose a life and go back to where you came in. You have three lives.
 - Once you have the key, get back to the **Entrance Hall** and walk into the front door. Your time is shown at the end; your best time is saved on this computer.
 
+## Scoring and high scores
+
+- **1 point** for every second you are actually walking (forwards or backwards; turning on the spot, standing still or walking into a wall earns nothing).
+- **5 points** the first time you go into each room in a game (the Entrance Hall, where you start, scores nothing).
+- **50 points** for picking up the front door key, and **200 points** for escaping through the front door.
+- Your score is shown at the top of the screen, and the bonuses float up over your head. The end screen shows your score and the best score.
+- The title screen takes turns showing the controls and a shared online **Top 10** (dreamlo), with a flag for each player's country. If your score makes the Top 10 you can type a name (up to 8 letters or numbers). Without the internet, scores are kept in `~/.haunted_mansion/scores.json` and sent next time; the game never waits for the network.
+
 ## The mansion
 
 | Floor | Rooms |
@@ -45,5 +53,7 @@ Ways between floors: the grand stairs (Staircase Hall and Landing), the cellar s
 - `tools/make_sprites.py`: the older single-frame sprite builder (from Daleks in Hedges); `make_walk.py` now writes the standing frames.
 - `tools/make_sounds.py`: synthesises all the spooky sounds.
 - `tools/selftest.py`: headless test. It checks the data, that every room can be reached, and that every hiding place can be found, then plays the game automatically: a tour of all 35 rooms, 60 games straight to the key and out, and one game for every hiding place.
+- `scores.py`: the online Top 10 (its own dreamlo board, separate from Daleks in Hedges and Dinosaur vs Bees), flags and the local scores file. Network calls run on background threads; HTTPS lookups fall back to certifi or no verification on a Python without CA certificates.
+- `tools/score_test.py`: headless checks of every points rule (and whole games scored against an independent tally), plus qualifying, name entry and the faked dreamlo calls.
 - `tools/shots.py`: saves sample screenshots.
 - Debug: `python3 game.py --room crypt --no-enemies`, or headless `SDL_VIDEODRIVER=dummy python3 game.py --scene room --room library --screenshot out.png`.
