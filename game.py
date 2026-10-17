@@ -1193,6 +1193,8 @@ class Game:
                 if o.slide_t > 0:
                     k = o.slide_t / SLIDE_TIME
                     ox, oy = o.x + o.dx * k, o.y + o.dy * k
+                if o.t["kind"] == "furniture":
+                    self.draw_floor_shadow(o, ox, oy)   # on the floor, under everything standing
                 items.append(((ox, oy, ox + o.gx, oy + o.gy), ("obj", o, ox, oy)))
         key_here = self.key_state == "revealed" and self.key_place[0] == r.id
         if key_here:
@@ -1240,10 +1242,33 @@ class Game:
             self.draw_end()
 
     def blit_footprint(self, name, o, x, y):
+        """Bottom of the sprite on the front corner of the footprint, centred
+        on it (an item drawn smaller than its tile sits further back)."""
         img = self.art.furniture(name, o.facing)
-        left = self.P(x, y + o.gy)[0]
+        cx = (self.P(x, y + o.gy)[0] + self.P(x + o.gx, y)[0]) / 2
         bottom = self.P(x + o.gx, y + o.gy)[1]
-        self.screen.blit(img, (round(left), round(bottom - img.get_height())))
+        k = self.art.scale(name)
+        if k < 1:
+            bottom -= (1 - k) * (o.gx + o.gy) * HH / 2
+        self.screen.blit(img, (round(cx - img.get_width() / 2), round(bottom - img.get_height())))
+
+    def draw_floor_shadow(self, o, x, y):
+        """A soft dark patch under a piece of furniture, so it stands on the floor."""
+        key = ("fshadow", o.gx, o.gy)
+        sh = self.glow_cache.get(key)
+        if sh is None:
+            w, h = (o.gx + o.gy) * HW, (o.gx + o.gy) * HH
+            pad = 14
+            big = pygame.Surface((w + 2 * pad, h + 2 * pad), pygame.SRCALPHA)
+            big.fill((0, 0, 0, 0))
+            pts = [(pad + o.gy * HW, pad), (pad + w, pad + o.gy * HH), (pad + o.gx * HW, pad + h), (pad, pad + o.gx * HH)]
+            pygame.draw.polygon(big, (0, 0, 0, 120), pts)
+            small = pygame.transform.smoothscale(big, (max(1, big.get_width() // 6), max(1, big.get_height() // 6)))
+            sh = pygame.transform.smoothscale(small, big.get_size())
+            self.glow_cache[key] = sh
+        left = self.P(x, y + o.gy)[0] - 14
+        top = self.P(x, y)[1] - 14
+        self.screen.blit(sh, (round(left), round(top)))
 
     def draw_shadow(self, x, y, w=0.5):
         cx, cy = self.P(x, y)

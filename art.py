@@ -946,6 +946,13 @@ def _crop_alpha(img):
     return img.subsurface(r).copy() if r.w and r.h else img
 
 
+# Painted art is fitted to its footprint's width; a few pieces are painted with
+# a lot of base or air around them, so they get a size correction to sit right
+# next to the 160 px characters.
+ART_SCALE = {"pumpkin": 0.6, "suit_of_armour": 1.4, "statue": 1.1, "mangle": 1.1, "cauldron": 0.9,
+             "washtub": 0.9, "rocking_horse": 1.05}
+
+
 def load_real(name):
     """assets/art/<name>.png scaled to fit the target size (bottom-aligned
     for furniture: width matched to the footprint), or None."""
@@ -959,9 +966,16 @@ def load_real(name):
     tw, th = target_size(name)
     kind = T[name]["kind"]
     if kind in ("furniture", "flat", "link"):
-        k = tw / img.get_width()                       # footprint fixes the width
+        k = tw / img.get_width() * ART_SCALE.get(name, 1.0)   # footprint fixes the width
     elif kind == "wall":
-        return pygame.transform.smoothscale(img, (tw, th))
+        if name in ("front_door", "door_frame"):
+            return pygame.transform.smoothscale(img, (tw, th))      # fills the doorway exactly
+        k = min(tw / img.get_width(), th / img.get_height())      # keep its shape, centred
+        small = pygame.transform.smoothscale(img, (max(1, round(img.get_width() * k)), max(1, round(img.get_height() * k))))
+        out = pygame.Surface((tw, th), pygame.SRCALPHA)
+        out.fill((0, 0, 0, 0))
+        out.blit(small, ((tw - small.get_width()) // 2, (th - small.get_height()) // 2))
+        return out
     else:
         k = th / img.get_height()                       # height fixes the scale
     size = (max(1, round(img.get_width() * k)), max(1, round(img.get_height() * k)))
@@ -1019,6 +1033,11 @@ class Art:
                 img = make_placeholder(name)
             self.cache[key] = img.convert_alpha() if pygame.display.get_surface() else img
         return self.cache[key]
+
+    def scale(self, name):
+        """Size correction of the painted art (1 for placeholders)."""
+        self.base(name)
+        return ART_SCALE.get(name, 1.0) if name in self.real else 1.0
 
     def furniture(self, name, facing):
         """Image for an object facing E (as drawn) or S (mirrored)."""
