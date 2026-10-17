@@ -14,3 +14,8 @@ furn8_iso.jpg (3x2): piano, linen_press, chair | armchair, rocking_horse, harp  
 furn9_iso.jpg (2x1, 1280x720): (front-on pumpkin, unused), boiler  (corner view; furnace door faces lower left, mirrored)
 pumpkin_iso.jpg (1x1, 1280x720): pumpkin  (corner view; face already to the lower right, not mirrored)
 Note: furniture faces vary (some front-on/lower-left rather than lower-right); mirror where needed so the front faces lower right per the manifest.
+faces1.jpg (3x3, 1280x720): flat elevations: fireplace front, fireplace pilaster side, marble mantel top | dresser base front, dresser plate-rack front, green side panel | chest of drawers front, mahogany side, mahogany top  (used by tools/iso_box.py)
+faces2.jpg (4x3, 1280x720): flat elevations: bookcase front, oak side, wardrobe front, walnut side | piano front, piano keyboard top, black side panel, grandfather clock front | linen press front, desk front, desk top, toy box front  (used by tools/iso_box.py)
+  -> fireplace, kitchen_dresser, chest_of_drawers, bookcase, wardrobe, piano, grandfather_clock, linen_press, desk, toy_box are BUILT by `python3 tools/iso_box.py --build` (exact 2:1 boxes), not cut; their furn1_iso/furn8_iso/furn2 versions are unused.
+organic_iso.jpg (4x1, 1280x720): armchair, chair, harp, rocking_horse  (corner views, front already to the lower right, not mirrored; replace the furn8_iso versions)
+coffin, tomb, cot (furn2/furn6/furn7) are now mirrored so their long side lies along the 2-tile (lower-left) edge of the footprint.

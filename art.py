@@ -953,6 +953,14 @@ ART_SCALE = {"pumpkin": 0.6, "suit_of_armour": 1.4, "statue": 1.1, "mangle": 1.1
              "washtub": 0.9, "rocking_horse": 1.05}
 
 
+# Built by tools/iso_box.py on the exact footprint canvas (the footprint's
+# full width, its front corner at the bottom): loaded without cropping, so a
+# piece shallower than its footprint still sits against the wall at the
+# right size.
+ISO_BOX_ART = {"fireplace", "kitchen_dresser", "chest_of_drawers", "bookcase", "wardrobe", "piano",
+               "grandfather_clock", "linen_press", "desk", "toy_box"}
+
+
 def load_real(name):
     """assets/art/<name>.png scaled to fit the target size (bottom-aligned
     for furniture: width matched to the footprint), or None."""
@@ -960,7 +968,9 @@ def load_real(name):
     if not os.path.exists(path):
         return None
     try:
-        img = _crop_alpha(pygame.image.load(path).convert_alpha())
+        img = pygame.image.load(path).convert_alpha()
+        if name not in ISO_BOX_ART:
+            img = _crop_alpha(img)
     except Exception:
         return None
     tw, th = target_size(name)

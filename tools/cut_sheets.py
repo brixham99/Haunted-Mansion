@@ -3,7 +3,7 @@
 into one PNG per sprite in assets/art/, which art.py loads in place of the
 placeholders.
 
-    python3 tools/cut_sheets.py [--sheet DIR]   # also writes DIR/cut_sheet.png for review
+    python3 tools/cut_sheets.py [--sheet DIR] [--only a,b]   # --sheet: also writes a contact sheet; --only: just these sprites
 
 - Background: near-white pixels flood-filled from the border (not a global
   white key), so white and pale things keep their whites: the ghost, lace,
@@ -14,8 +14,11 @@ placeholders.
   in rows top to bottom and left to right (SHEETS.md gives the order). A
   None in LAYOUT is an old version that a later sheet replaces: it is still
   found (so the rest of the sheet splits right) but not saved. furn1.jpg and
-  the front-on pieces of furn2/3/4/7 are replaced by the corner views in
-  furn1_iso.jpg and furn8_iso.jpg; the boiler and pumpkin by furn9_iso.jpg
+  the front-on pieces of furn2/3/4/7 were replaced by the corner views in
+  furn1_iso.jpg and furn8_iso.jpg, and those in turn by exact-2:1 pieces built
+  by tools/iso_box.py (fireplace, dresser, chest of drawers, bookcase,
+  wardrobe, piano, clock, linen press, desk, toy box) and the corner views in
+  organic_iso.jpg (armchair, chair, harp, rocking horse); the boiler and pumpkin by furn9_iso.jpg
   and pumpkin_iso.jpg (the pumpkin on the left of furn9_iso is not used).
 - Edges: soft alpha from the distance to white, with the white unmixed from
   the edge colour (no white halo); specks are dropped.
@@ -44,14 +47,18 @@ sys.path.insert(0, ROOT)
 LAYOUT = {
     "enemies.jpg": [["ghost", "goblin", "bat"], ["spider", "skeleton", "monster"]],
     # furn1.jpg (front-on) is no longer used: all six are in furn1_iso.jpg
-    "furn1_iso.jpg": [["grandfather_clock", "wardrobe", "bookcase"], ["chest_of_drawers", "kitchen_dresser", "fireplace"]],
-    "furn2.jpg": [[None, "desk", "wine_rack"], ["barrel", "coffin", "toy_box"]],          # piano: furn8_iso
+    # furn1_iso.jpg: all six are now built by tools/iso_box.py (exact 2:1) from faces1/2.jpg
+    "furn1_iso.jpg": [[None, None, None], [None, None, None]],
+    "furn2.jpg": [[None, None, "wine_rack"], ["barrel", "coffin", None]],          # piano, desk, toy_box: iso_box.py
     "furn3.jpg": [["trunk", "suit_of_armour", None], ["bed", "coal_heap", "cauldron"]],   # linen_press: furn8_iso
     "furn4.jpg": [[None, None, "chest"], ["crate", None, "dining_table"]],                # chair, armchair, rocking_horse: furn8_iso
     "furn5.jpg": [["round_table", "kitchen_table", "sofa"], ["billiard_table", "range_cooker", "sink"]],
     "furn6.jpg": [[None, "water_tank", "tomb"], ["mangle", "washtub", "bath"]],           # boiler: furn9_iso
     "furn7.jpg": [["washstand", "cot", "potted_palm", "statue"], ["candelabra", None, "dummy", None]],  # harp: furn8_iso; pumpkin: pumpkin_iso
-    "furn8_iso.jpg": [["piano", "linen_press", "chair"], ["armchair", "rocking_horse", "harp"]],
+    # furn8_iso.jpg: piano and linen_press are built by iso_box.py; chair, armchair,
+    # rocking_horse and harp come from organic_iso.jpg (true corner views)
+    "furn8_iso.jpg": [[None, None, None], [None, None, None]],
+    "organic_iso.jpg": [["armchair", "chair", "harp", "rocking_horse"]],
     "furn9_iso.jpg": [[None, "boiler"]],          # the front-on pumpkin on the left is not used
     "pumpkin_iso.jpg": [["pumpkin"]],
     "wall.jpg": [["painting", "painting_lady", "painting_landscape", "mirror", "window", "cobweb"],
@@ -68,17 +75,19 @@ LAYOUT = {
 # except the chair (seat already to the lower right) and the harp (symmetric).
 # furn9_iso: the boiler's furnace door faces lower left (mirrored); pumpkin_iso:
 # the face is already to the lower right (not mirrored).
-MIRROR = {"desk", "wine_rack", "toy_box", "trunk", "suit_of_armour", "bed",
+# organic_iso.jpg is painted front to the lower right already (not mirrored).
+# coffin, tomb, cot (1 wide x 2 deep) were painted with the long side on the
+# right; mirrored so it lies along the footprint's long (lower-left) edge.
+MIRROR = {"wine_rack", "trunk", "suit_of_armour", "bed",
           "chest", "dining_table", "sofa", "billiard_table", "range_cooker", "sink", "boiler", "bath",
           "washstand", "sewing_machine", "ladder_up", "goblin", "spider",
-          "grandfather_clock", "wardrobe", "bookcase", "chest_of_drawers", "kitchen_dresser", "fireplace",
-          "piano", "linen_press", "armchair", "rocking_horse"}
+          "coffin", "tomb", "cot"}
 
 BG_T = 20                  # "white": max channel distance from 255
 HOLE_MAX, HOLE_FLAT = 40000, 0.6
 # Sheets whose white has more JPEG noise: the gaps between the boiler's pipes
 # and gauges (furn9_iso) are only ~53% within 5 of pure white.
-HOLE_FLAT_SHEET = {"furn9_iso.jpg": 0.45}
+HOLE_FLAT_SHEET = {"furn9_iso.jpg": 0.45, "organic_iso.jpg": 0.4}
 SPECK = 40
 SOFT_LO, SOFT_HI = 8, 70
 HARMONISE = dict(saturation=1.06, contrast=1.04, brightness=1.06)
@@ -256,6 +265,23 @@ def fix_ground_shadow(img, pockets=True):
     return Image.fromarray((out + 0.5).astype(np.uint8), "RGBA")
 
 
+# White seen between closely spaced bars (harp strings, a pierced chair
+# back) is split into pockets too small to count as holes: key out pale,
+# neutral pixels on these pieces (none of them has white of its own).
+KEY_WHITE = {"harp": 228, "chair": 228}
+
+
+def key_white(img, thr):
+    a = np.asarray(img).astype(np.float64)
+    rgb = a[..., :3]
+    lo = rgb.min(axis=2)
+    sat = rgb.max(axis=2) - lo
+    k = np.clip((250.0 - lo) / (250.0 - thr), 0.0, 1.0)      # 1 below thr, 0 at pure white
+    k = np.where(sat < 24, k, 1.0)
+    a[..., 3] *= k
+    return Image.fromarray((a + 0.5).astype(np.uint8), "RGBA")
+
+
 def harmonise(img):
     a = img.split()[3]
     rgb = img.convert("RGB")
@@ -303,16 +329,22 @@ def main(argv):
     review = None
     if "--sheet" in argv:
         review = argv[argv.index("--sheet") + 1]
+    only = set(argv[argv.index("--only") + 1].split(",")) if "--only" in argv else None
     os.makedirs(OUT, exist_ok=True)
     made = {}
     for sheet, rows in LAYOUT.items():
+        names = {n for r in rows for n in r if n}
+        if not names or (only is not None and not only & names):
+            continue
         rgb = np.asarray(Image.open(os.path.join(SHEETS, sheet)).convert("RGB")).astype(np.float64)
         bg, d = background(rgb, HOLE_FLAT_SHEET.get(sheet, HOLE_FLAT))
         fg = ~bg
         for name, box, mask in find_items(fg, rows):
-            if name is None:
+            if name is None or (only is not None and name not in only):
                 continue
             img = cut_item(rgb, d, mask, box)
+            if name in KEY_WHITE:
+                img = key_white(img, KEY_WHITE[name])
             if name in MIRROR:
                 img = img.transpose(Image.FLIP_LEFT_RIGHT)
             if name not in NO_SHADOW_FIX:
