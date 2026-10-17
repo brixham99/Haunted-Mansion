@@ -46,11 +46,6 @@ def uses():
     return count, rooms
 
 
-TURN_VIEW_TEXT = {"s": "front: facing the camera, straight on", "w": "facing screen left (profile)",
-                  "e": "facing screen right (profile)", "n": "back: facing away from the camera"}
-TURN_PAIRS = {"s": ("se", "sw"), "w": ("sw", "nw"), "e": ("ne", "se"), "n": ("nw", "ne")}
-
-
 def main():
     pygame.init()
     pygame.display.set_mode((16, 16))
@@ -109,12 +104,6 @@ def main():
                       "Run the game; real art replaces the placeholder automatically.",
         "sprites": sprites,
         "characters": chars,
-        "turn_views": [{"name": f"{c}_{v}", "file": f"assets/characters/{c}_{v}.png",
-                        "source": f"tools/art/{c}_turn_{v}_source.png", "view": TURN_VIEW_TEXT[v],
-                        "between": "/".join(TURN_PAIRS[v]),
-                        "status": "done" if os.path.exists(os.path.join(ROOT, "assets", "characters", f"{c}_{v}.png"))
-                        else "wanted (the game squashes the turn until then)"}
-                       for c in ("archie", "holly") for v in ("s", "w", "e", "n")],
     }
     with open(os.path.join(ROOT, "assets", "ART_MANIFEST.json"), "w") as f:
         json.dump(data, f, indent=1)
@@ -158,23 +147,6 @@ def main():
     md += ["", "## Characters (done)", "",
            "Archie and Holly, four facings each, in `assets/characters/`, built by `tools/make_sprites.py` from the "
            "high-resolution sources in `tools/art/` (160 px figures on a 168 px canvas).", ""]
-    md += ["## Turn in-between views (wanted)", "",
-           "Four extra pictures per character, shown only in the middle of a quarter turn (never for walking). "
-           "Until they exist the game narrows the sprite and swaps facings at the midpoint. "
-           "Named by the way the character faces **on screen**:", "",
-           "| Source to supply (tools/art/) | View | Shown between | Game file |", "|---|---|---|---|"]
-    for c in ("archie", "holly"):
-        for v in ("s", "w", "e", "n"):
-            md.append(f"| `{c}_turn_{v}_source.png` | {TURN_VIEW_TEXT[v]} | {' and '.join(TURN_PAIRS[v])} | "
-                      f"`assets/characters/{c}_{v}.png` |")
-    md += ["", "Full body, standing still with feet together-ish and both feet visible, same outfit, hair and "
-           "lighting (from the upper left) as the existing art, head to toe straight up the picture. Transparent PNG is "
-           "best; otherwise one flat, even background colour that is not in the character (a bright green such as "
-           "#00B140 is safest; white is fine for Archie, but Holly's pale dress makes white risky). No floor, no "
-           "drop shadow, no text, nothing else in the picture. At least 600 px tall for the figure (the 3/4 sources "
-           "are 660 to 1200 px); any size above that works. Then run `python3 tools/make_turn_frames.py` "
-           "(add `--sheet out.png` for a review sheet): it cuts the background, scales the figure to exactly 160 px "
-           "and puts its feet on the same ground line as the neighbouring facings.", ""]
     with open(os.path.join(ROOT, "assets", "ART_MANIFEST.md"), "w") as f:
         f.write("\n".join(md) + "\n")
     print(f"{len(sprites)} sprites -> assets/ART_MANIFEST.json, assets/ART_MANIFEST.md, assets/art_reference/")

@@ -1128,37 +1128,7 @@ def load_character(cid):
             img, sheet = img.convert_alpha(), sheet.convert_alpha()
         stand[k] = img
         walk[k] = [sheet.subsurface((i * fw, 0, fw, fh)).copy() for i in range(meta["frames"])]
-    # Optional in-between views used only in the middle of a quarter turn
-    # (never for walking), written by tools/make_turn_frames.py:
-    # <cid>_s.png (facing the camera), _w (screen left), _e (screen right),
-    # _n (away), each on the standing-frame canvas, ground point from
-    # <cid>_turn.json (else the mean of the standing anchors).
-    turn, turn_anchor = {}, {}
-    try:
-        with open(os.path.join(CHAR_DIR, f"{cid}_turn.json")) as f:
-            turn_meta = json.load(f).get("views", {})
-    except Exception:
-        turn_meta = {}
-    mean = [sum(meta["facings"][k]["anchor"][i] for k in stand) / 4 for i in (0, 1)]
-    for v in TURN_VIEWS:
-        path = os.path.join(CHAR_DIR, f"{cid}_{v}.png")
-        if not os.path.exists(path):
-            continue
-        try:
-            img = pygame.image.load(path)
-            turn[v] = img.convert_alpha() if alpha else img
-            turn_anchor[v] = tuple(turn_meta.get(v, {}).get("anchor", mean))
-        except Exception:
-            pass
-    return {"stand": stand, "walk": walk, "meta": meta, "turn": turn, "turn_anchor": turn_anchor}
-
-
-# In-between turn views, named by the way the character faces on screen:
-# s = towards the camera, w = screen left, e = screen right, n = away.
-TURN_VIEWS = ("s", "w", "e", "n")
-# The view that sits between two neighbouring diagonal sprites (either order).
-TURN_BETWEEN = {frozenset(("se", "sw")): "s", frozenset(("sw", "nw")): "w",
-                frozenset(("nw", "ne")): "n", frozenset(("ne", "se")): "e"}
+    return {"stand": stand, "walk": walk, "meta": meta}
 
 
 _SHADOWS = {}
