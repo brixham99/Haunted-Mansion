@@ -253,6 +253,63 @@ def data_checks():
     return house
 
 
+WORLD_STEP = {"se": (56, 28), "sw": (-56, 28), "ne": (56, -28), "nw": (-56, -28)}  # screen px per tile walked
+
+
+def walk_checks(g):
+    """Animation: planted feet must not slide, footsteps must match touch-
+    downs, idle must show the standing frame, and the frames must be there."""
+    worst = 0.0
+    for cid, ch in g.chars.items():
+        meta = ch["meta"]
+        n = meta["frames"]
+        check(all(len(ch["walk"][k]) == n for k in WORLD_STEP), f"{cid}: {n} walk frames for every facing")
+        check(all(ch["walk"][k][0].get_size() == tuple(meta["size"]) for k in WORLD_STEP), f"{cid}: frame size")
+        for k, (sx, sy) in WORLD_STEP.items():
+            feet = meta["facings"][k]["feet"]
+            body = (sx * meta["cycle_tiles"] / n, sy * meta["cycle_tiles"] / n)   # body moves this far per frame
+            for i in range(n):
+                a, b = feet[i], feet[(i + 1) % n]
+                for leg in ("near", "far"):
+                    if a[leg]["down"] and b[leg]["down"]:
+                        # on screen: foot = body + sprite offset, so the sprite offset must cancel the body's move
+                        slide = math.hypot(b[leg]["x"] - a[leg]["x"] + body[0], b[leg]["y"] - a[leg]["y"] + body[1])
+                        worst = max(worst, slide)
+            check(feet[0]["near"]["down"] and feet[n // 2]["far"]["down"], f"{cid} {k}: touch-downs at frames 0 and {n // 2}")
+    check(worst < 0.75, f"planted feet slide up to {worst:.2f} px per frame")
+    # footsteps: walk a known distance and count them
+    g.new_game(7)
+    g.mode = "play"
+    g.enter_room("ballroom", None)
+    g.enemies = []
+    g.px, g.py, g.facing = 1.5, 2.5, "E"
+    before = sum(g.sounds.requested.get(f"step{i}", 0) for i in (1, 2, 3))
+    x0 = g.px
+    for _ in range(60):
+        g.update(DT, auto=(1, 0))
+    walked = g.px - x0
+    steps = sum(g.sounds.requested.get(f"step{i}", 0) for i in (1, 2, 3)) - before
+    cyc = g.chars[g.character]["meta"]["cycle_tiles"]
+    expect = (G.WALK_START + walked / cyc) * 2 - G.WALK_START * 2
+    check(abs(steps - math.floor(G.WALK_START * 2 + walked / cyc * 2)) <= 1,
+          f"footsteps {steps} for {walked:.2f} tiles (cycle {cyc} tiles, expected ~{expect:.1f})")
+    img_walk, feet = g.walk_frame()
+    check(g.moving and feet is not None, "walking shows a walk frame")
+    g.update(DT, auto=(0, 0))
+    img, feet = g.walk_frame()
+    check(feet is None and img is g.chars[g.character]["stand"]["se"], "standing still shows the standing frame")
+    # blocked: pressing into a wall does not animate or step
+    g.px, g.py = 0.3, 2.5
+    ph = g.walk_phase
+    before = sum(g.sounds.requested.get(f"step{i}", 0) for i in (1, 2, 3))
+    for _ in range(30):
+        g.update(DT, auto=(-1, 0))
+    after = sum(g.sounds.requested.get(f"step{i}", 0) for i in (1, 2, 3))
+    check(after == before and abs(g.walk_phase - ph) < 0.05, "walking into a wall should not move the legs or step")
+    print(f"walk cycles: {', '.join(f'{c} {ch['meta']['cycle_tiles']:.2f} tiles' for c, ch in g.chars.items())}; "
+          f"worst planted-foot slide {worst:.2f} px/frame; {steps} footsteps over {walked:.2f} tiles")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true")
@@ -266,6 +323,7 @@ def main():
     g = G.Game(screen, seed=1, enemies=True, god=True, save=False, title=False)
     if args.shots:
         os.makedirs(args.shots, exist_ok=True)
+    walk_checks(g)
     # ---- full tour with enemies (invulnerable)
     if not args.quick:
         g.new_game(1)

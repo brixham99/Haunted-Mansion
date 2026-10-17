@@ -5,11 +5,11 @@ A Halloween isometric flip-screen adventure in the style of Knight Lore and Head
 ## Install and play
 
 ```bash
-python3 -m pip install -r requirements.txt     # pygame and numpy (pygame-ce works too)
+python3 -m pip install -r requirements.txt     # pygame-ce and numpy
 python3 game.py
 ```
 
-The game is drawn at 1280 x 800 and the window can be resized.
+The game is drawn at 1280 x 800 and the window can be resized. It uses pygame-ce (the community edition of pygame), which installs ready-built on Macs where plain pygame will not build. If the old `pygame` package is installed, uninstall it first (`python3 -m pip uninstall pygame`), because the two share the name `pygame`.
 
 ## How to play
 
@@ -38,7 +38,8 @@ Ways between floors: the grand stairs (Staircase Hall and Landing), the cellar s
 - `objects.py`: every object and enemy type: size, behaviour, search messages and art description.
 - `art.py`: loads real art from `assets/art/<name>.png` if it exists, otherwise draws a placeholder.
 - `assets/ART_MANIFEST.md` / `.json`: every sprite needed, with sizes and descriptions (`python3 tools/write_manifest.py` rebuilds them). `assets/art_reference/` holds the placeholders as a layout guide.
-- `tools/make_sprites.py`: builds Archie and Holly from the high-resolution sources in `tools/art/`.
+- `tools/make_walk.py`: builds Archie's and Holly's standing frames and 8-frame walk cycles (all four facings) from the high-resolution sources in `tools/art/`, entirely in code. Each source is cut into body, near and far legs, and near and far arms, then posed and downscaled to a 160 px figure. It also writes `assets/characters/<name>_walk.json` with the foot positions and the distance one cycle covers. In the game the walk advances by the distance actually walked, so the feet don't slide, and footsteps play on each touch-down. `tools/walk_sheets.py` makes review sheets and a GIF.
+- `tools/make_sprites.py`: the older single-frame sprite builder (from Daleks in Hedges); `make_walk.py` now writes the standing frames.
 - `tools/make_sounds.py`: synthesises all the spooky sounds.
 - `tools/selftest.py`: headless test. It checks the data, that every room can be reached, and that every hiding place can be found, then plays the game automatically: a tour of all 35 rooms, 60 games straight to the key and out, and one game for every hiding place.
 - `tools/shots.py`: saves sample screenshots.

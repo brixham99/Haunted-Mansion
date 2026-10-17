@@ -18,6 +18,7 @@ import game as G  # noqa: E402
 from selftest import Pilot  # noqa: E402
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else "/workspace"
+os.makedirs(OUT, exist_ok=True)
 
 
 def run(g, secs, d=(0, 0)):

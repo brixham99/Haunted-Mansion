@@ -37,7 +37,6 @@ HW, HH = TILE_W // 2, TILE_H // 2
 SLAB = 18                      # floor thickness shown along the open front edges
 PLAYER_R = 0.24                # half-size of the player's collision box (tiles)
 PLAYER_SPEED = 3.0             # tiles per second
-STEP_EVERY = 0.30              # s between footsteps
 PUSH_DELAY = 0.25              # s of shoving before a pushable moves
 SLIDE_TIME = 0.22
 SEARCH_TIME = 0.55
@@ -57,6 +56,8 @@ SAVE_FILE = os.path.join(SAVE_DIR, "best.json")
 CHARACTERS = {"archie": "Archie", "holly": "Holly"}
 CHAR_ORDER = ("archie", "holly")
 FACING_SPRITE = {"N": "ne", "E": "se", "S": "sw", "W": "nw"}
+FACING_DIR_XY = {"N": (0, -1), "E": (1, 0), "S": (0, 1), "W": (-1, 0)}
+WALK_START = 0.2               # a fresh walk starts just before the feet pass (no leap from standing)
 DIRS = {"N": (0, -1), "S": (0, 1), "E": (1, 0), "W": (-1, 0)}
 # Each arrow moves one eighth-turn clockwise of its label on screen:
 #   Up = up-right (N), Right = down-right (E), Down = down-left (S), Left = up-left (W)
@@ -224,7 +225,6 @@ class Game:
         self.sounds = Sounds()
         self.art = art.Art()
         self.chars = {cid: art.load_character(cid) for cid in CHAR_ORDER}
-        self.anchor = {cid: {k: self._feet(img) for k, img in s.items()} for cid, s in self.chars.items()}
         self.f_hud = load_font(22, bold=True)
         self.f_hud_small = load_font(17)
         self.f_msg = load_font(24)
@@ -252,11 +252,6 @@ class Game:
             self.sounds.loop("title_theme")
 
     # ------------------------------------------------------------ set-up
-    @staticmethod
-    def _feet(img):
-        r = img.get_bounding_rect(min_alpha=16)
-        return r.centerx, r.bottom
-
     def _load_best(self):
         if not self.save_ok:
             return None
@@ -297,7 +292,7 @@ class Game:
         self.grace = 0.0
         self.push_t = 0.0
         self.push_obj = None
-        self.step_t = 0.0
+        self.step_n = 0
         self.creak_t = 8.0
         self.won = False
         self.lost = False
@@ -308,7 +303,7 @@ class Game:
         self.room = None
         self.facing = "N"
         self.moving = False
-        self.walk_phase = 0.0
+        self.walk_phase = WALK_START   # walk cycle position (0..1), advanced by distance walked
         self.enter_room(start_room, None)
         if start_room == M.START_ROOM:
             r = self.room
@@ -445,6 +440,30 @@ class Game:
                     return (cx, cy)
         return None
 
+    def advance_walk(self, dist):
+        """Move the walk cycle on by the distance actually walked (so the
+        planted foot never slides) and play a footstep at each touch-down."""
+        if dist <= 0:
+            return
+        meta = self.chars[self.character]["meta"]
+        old = self.walk_phase
+        new = old + dist / meta["cycle_tiles"]
+        # touch-downs at phase 0 (near foot) and 0.5 (far foot)
+        for _ in range(int(math.floor(new * 2)) - int(math.floor(old * 2))):
+            self.step_n += 1
+            self.sounds.play(("step1", "step2", "step3")[self.step_n % 3])
+        self.walk_phase = new % 1.0 if new >= 1.0 else new
+
+    def walk_frame(self):
+        """(image, foot info or None) for the player right now."""
+        ch = self.chars[self.character]
+        k = FACING_SPRITE[self.facing]
+        if not self.moving:
+            return ch["stand"][k], None
+        n = ch["meta"]["frames"]
+        i = int(self.walk_phase * n) % n
+        return ch["walk"][k][i], ch["meta"]["facings"][k]["feet"][i]
+
     def move_player(self, dx, dy, dt):
         """Axis-separated move with corner sliding; returns the cell bumped."""
         solid = self.room.solid_cells()
@@ -533,18 +552,15 @@ class Game:
                 self.facing = "E" if dx > 0 else "W"
             else:
                 self.facing = "S" if dy > 0 else "N"
+            ox, oy = self.px, self.py
             bumped = self.move_player(dx, dy, dt)
-            self.walk_phase += dt
-            self.step_t -= dt
-            if self.step_t <= 0:
-                self.sounds.play(random.choice(("step1", "step2", "step3")))
-                self.step_t = STEP_EVERY
+            self.advance_walk(math.hypot(self.px - ox, self.py - oy))
             self.handle_bump(bumped, dx, dy, dt)
             if self.fade or self.mode != "play":
                 return
         else:
             self.push_t = 0.0
-            self.step_t = 0.05
+            self.walk_phase = WALK_START   # idle: standing frame; the next walk starts mid-stride
         self.check_exits()
         if self.fade:
             return
@@ -1162,12 +1178,41 @@ class Game:
             if self.invuln > 0 and int(self.invuln * 10) % 2 == 0:
                 return
             k = FACING_SPRITE[self.facing]
-            img = self.chars[self.character][k]
-            ax, ay = self.anchor[self.character][k]
-            bob = abs(math.sin(self.walk_phase * 10)) * 4 if self.moving else 0
-            self.draw_shadow(self.px, self.py, 0.55)
-            fx, fy = self.P(self.px, self.py, bob)
-            s.blit(img, (round(fx - ax), round(fy - ay + 2)))
+            img, feet = self.walk_frame()
+            meta = self.chars[self.character]["meta"]
+            ax, ay = meta["facings"][k]["anchor"]
+            px, py = self.px, self.py
+            if feet is not None:
+                # Root motion: draw the figure where this frame was posed, so a
+                # planted foot stays put between frames instead of creeping.
+                n = meta["frames"]
+                frac = self.walk_phase * n - int(self.walk_phase * n)
+                back = frac * meta["cycle_tiles"] / n
+                ddx, ddy = FACING_DIR_XY[self.facing]
+                px, py = px - back * ddx, py - back * ddy
+            gx, gy = self.P(px, py)
+            x0, y0 = round(gx - ax), round(gy - ay)
+            self.draw_player_shadow(gx, gy, x0, y0, feet, meta["facings"][k])
+            s.blit(img, (x0, y0))
+
+    def draw_player_shadow(self, gx, gy, x0, y0, feet, fmeta):
+        """Ground the figure: a soft pool where they stand, and a small dark
+        contact shadow under each shoe that fades and shrinks as it lifts."""
+        s = self.screen
+        pool = art.soft_shadow(30, 12, 70)
+        s.blit(pool, (gx - pool.get_width() / 2, gy - pool.get_height() / 2))
+        spots = feet if feet is not None else fmeta["feet"][0]
+        for leg in ("far", "near"):
+            f = spots[leg]
+            lift = f["lift"] if feet is not None else 0.0
+            if feet is None:   # standing: use the rest positions (frame 0 is not at rest)
+                f = fmeta.get("rest", {}).get(leg, f)
+            k = max(0.0, 1.0 - lift / 9.0)
+            if k <= 0.05:
+                continue
+            sh = art.soft_shadow(11 * (0.65 + 0.35 * k), 4.5 * (0.65 + 0.35 * k), 150 * k)
+            fx, fy = x0 + f["x"], y0 + f["y"] + lift
+            s.blit(sh, (fx - sh.get_width() / 2, fy - sh.get_height() / 2 - 1))
 
     # ------------------------------------------------------------ HUD
     def draw_hud(self):
@@ -1378,13 +1423,17 @@ class Game:
         x0 = (WIN_W - (bw * 2 + gap)) / 2
         for i, cid in enumerate(CHAR_ORDER):
             sel = i == self.title_pick
-            img = self.chars[cid]["se" if i == 0 else "sw"]
+            ch = self.chars[cid]
+            k = "se" if i == 0 else "sw"
+            # the chosen character walks on the spot
+            img = ch["walk"][k][int(self.time * 9) % ch["meta"]["frames"]] if sel else ch["stand"][k]
             bx, by = x0 + i * (bw + gap), 240
             frame = pygame.Surface((bw, bh), pygame.SRCALPHA)
             frame.fill((20, 10, 24, 220 if sel else 150))
             pygame.draw.rect(frame, (255, 170, 60) if sel else (120, 80, 60), frame.get_rect(), 3 if sel else 1, border_radius=6)
             s.blit(frame, (bx, by))
-            s.blit(img, (bx + (bw - img.get_width()) / 2, by + 14))
+            ax, ay = ch["meta"]["facings"][k]["anchor"]
+            s.blit(img, (round(bx + bw / 2 - ax), round(by + 184 - ay)))
             nm = self.text(self.f_sub, CHARACTERS[cid], (255, 220, 160) if sel else (180, 150, 120))
             s.blit(nm, (bx + (bw - nm.get_width()) / 2, by + bh - 52))
             if sel:

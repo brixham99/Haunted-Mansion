@@ -1057,8 +1057,42 @@ def glow(radius, colour, strength=1.0, squash=1.6):
 
 
 def load_character(cid):
-    out = {}
+    """Archie or Holly: the standing frame and the walk cycle for each facing,
+    plus the walk metadata (frame size, ground anchor, foot positions per
+    frame, cycle length in tiles) written by tools/make_walk.py."""
+    import json
+    with open(os.path.join(CHAR_DIR, f"{cid}_walk.json")) as f:
+        meta = json.load(f)
+    fw, fh = meta["size"]
+    alpha = pygame.display.get_surface() is not None
+    stand, walk = {}, {}
     for k in ("se", "sw", "nw", "ne"):
         img = pygame.image.load(os.path.join(CHAR_DIR, f"{cid}_{k}.png"))
-        out[k] = img.convert_alpha() if pygame.display.get_surface() else img
-    return out
+        sheet = pygame.image.load(os.path.join(CHAR_DIR, f"{cid}_{k}_walk.png"))
+        if alpha:
+            img, sheet = img.convert_alpha(), sheet.convert_alpha()
+        stand[k] = img
+        walk[k] = [sheet.subsurface((i * fw, 0, fw, fh)).copy() for i in range(meta["frames"])]
+    return {"stand": stand, "walk": walk, "meta": meta}
+
+
+_SHADOWS = {}
+
+
+def soft_shadow(rw, rh, alpha):
+    """A soft-edged dark ellipse (radii rw x rh), cached; plain alpha blit."""
+    import numpy as np
+    key = (int(rw), int(rh), int(alpha))
+    if key not in _SHADOWS:
+        w, h = max(2, key[0] * 2 + 2), max(2, key[1] * 2 + 2)
+        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+        d = np.sqrt(((xx + 0.5 - w / 2) / max(1, key[0])) ** 2 + ((yy + 0.5 - h / 2) / max(1, key[1])) ** 2)
+        a = np.clip((1.0 - d) / 0.45, 0, 1)
+        a = a * a * (3 - 2 * a) * key[2]
+        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        surf.fill((0, 0, 0, 0))
+        pa = pygame.surfarray.pixels_alpha(surf)
+        pa[:, :] = a.T.astype(np.uint8)
+        del pa
+        _SHADOWS[key] = surf
+    return _SHADOWS[key]

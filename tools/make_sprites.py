@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Build a character's in-game sprites (assets/<name>_{se,sw,nw,ne}.png) from
+"""(Superseded for the game by tools/make_walk.py, which writes the standing
+frames and walk cycles; its cut-out helpers are reused from here.)
+
+Build a character's in-game sprites (assets/<name>_{se,sw,nw,ne}.png) from
 the larger source art in tools/art/, with clean antialiased edges.
 
     python3 tools/make_sprites.py            # archie and holly
