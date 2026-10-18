@@ -37,6 +37,7 @@ import pygame  # noqa: E402
 
 import game as G  # noqa: E402
 import mansion as M  # noqa: E402
+import roundroom  # noqa: E402
 
 DT = 1 / 60
 FAILS = []
@@ -489,6 +490,62 @@ def exit_frame_checks(g):
     check(G.GHOST_FRAME_ALPHA / 255 <= 0.45 and 0.5 <= G.BACK_FRAME_ALPHA / 255 <= 0.65, "frame see-through levels")
 
 
+def round_room_checks(g):
+    """The round conservatory: floor, collision, key and enemies all keep
+    to the circle, and its drawn outline is a true 2:1 iso ellipse."""
+    house = M.Mansion()
+    r = house.rooms["conservatory"]
+    check(r.round and len(r.void) == 20, f"the conservatory is round ({len(r.void)} void corner cells)")
+    check(not any(c in r.void for o in r.objs for c in o.cells()), "conservatory furniture stands inside the circle")
+    check(not any(p[0] == r.id and p[1] == "open" and tuple(p[2]) in r.void for p in house.hiding_places()),
+          "the key never lies in the conservatory's void corners")
+    reach = house.room_reach(r)
+    check(not (reach & r.void), "nothing paths through the void corners")
+    for side in ("S", "E"):
+        check(all(c in reach for c in r.door_cells(side)), f"the conservatory's {side} doorway is reachable")
+    g.new_game(1)
+    g.mode = "play"
+    g.enter_room("conservatory", None)
+    g.fade = None
+    keep = g.enemies
+    g.enemies = []
+    worst = 0.0
+    for ang in range(0, 360, 10):
+        g.px, g.py = r.cx, r.cy
+        dx, dy = math.cos(math.radians(ang)), math.sin(math.radians(ang))
+        for _ in range(240):
+            g.move_player(dx, dy, 1 / 60)
+            if r.in_door_way(g.px, g.py, G.PLAYER_R):
+                break
+            worst = max(worst, math.hypot(g.px - r.cx, g.py - r.cy))
+    check(worst <= r.rad - G.PLAYER_R + 1e-6, f"you can't walk through the curved glass ({worst:.3f} <= {r.rad - G.PLAYER_R:.2f})")
+    out = 0
+    for start, d in (((3.3, 6.0), (0, 1)), ((6.0, 3.3), (1, 0))):
+        g.enter_room("conservatory", None)
+        g.fade = None
+        g.enemies = []
+        g.px, g.py = start
+        for _ in range(240):
+            g.move_player(*d, 1 / 60)
+            g.check_exits()
+            if g.fade:
+                out += 1
+                break
+    check(out == 2, f"both conservatory doorways lead out ({out}/2)")
+    bat = G.Enemy("bat", 4, 4, random.Random(2))
+    for _ in range(600):
+        g._float(bat, r, False, 1 / 30, 4, 4)
+    check(math.hypot(bat.x - r.cx, bat.y - r.cy) <= r.rad - 0.35 + 1e-6, "a bat in the conservatory stays inside the glass")
+    g.enemies = keep
+    ox, oy = g.P(r.cx, r.cy, 0, r)
+    err = 0.0
+    for i in range(36):
+        x, y = g.P(*roundroom.arc(r, i * math.pi / 18), 0, r)
+        hw, hh = r.rad * math.sqrt(2) * G.HW, r.rad * math.sqrt(2) * G.HH
+        err = max(err, abs(((x - ox) / hw) ** 2 + ((y - oy) / hh) ** 2 - 1))
+    check(err < 1e-9 and abs(G.HW / G.HH - 2) < 1e-9, f"the conservatory's circle is drawn as an exact 2:1 ellipse (err {err:.1g})")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true")
@@ -505,6 +562,7 @@ def main():
     walk_checks(g)
     anim_checks(g)
     exit_frame_checks(g)
+    round_room_checks(g)
     # ---- full tour with enemies (invulnerable)
     if not args.quick:
         g.new_game(1)

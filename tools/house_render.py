@@ -43,6 +43,7 @@ import pygame  # noqa: E402
 import game as G  # noqa: E402
 import mansion as M  # noqa: E402
 import art  # noqa: E402
+import roundroom  # noqa: E402
 
 HW, HH = G.HW, G.HH
 CUT_H = 150            # walls cut down to this (px above the floor; full walls are 230)
@@ -95,6 +96,17 @@ def render_room(g, r):
     mask.fill((0, 0, 0, 0))
     hexa = [P(-t, -t, CUT_H), P(r.w, -t, CUT_H), P(r.w, -t, -G.SLAB), P(r.w, r.d, -G.SLAB),
             P(-t, r.d, -G.SLAB), P(-t, r.d, CUT_H)]
+    if r.round:       # the conservatory: a circle, its glass wall cut down like the others
+        b0, b1 = roundroom.BACK
+        n = 48
+        ring = [P(*roundroom.arc(r, b0 + (b1 - b0) * i / n, r.rad + 0.14), CUT_H) for i in range(n + 1)]
+        ring += [P(*roundroom.arc(r, b1 + math.pi * i / n), -G.SLAB) for i in range(n + 1)]
+        hexa = ring
+        for x0, y0, x1, y1 in roundroom.door_aprons(r):
+            pygame.draw.polygon(mask, (255, 255, 255, 255), [P(x0, y0, -G.SLAB), P(x1, y0, -G.SLAB), P(x1, y1, -G.SLAB),
+                                                              P(x1, y1), P(x0, y1), P(x0, y0)])
+            pygame.draw.polygon(mask, (255, 255, 255, 255), [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1),
+                                                              P(x0, y1, -G.SLAB), P(x1, y1, -G.SLAB), P(x1, y0, -G.SLAB)])
     pygame.draw.polygon(mask, (255, 255, 255, 255), hexa)
     for side in ("S", "E"):            # the thresholds past the open doorways
         rng = r.door_range(side)
@@ -109,10 +121,21 @@ def render_room(g, r):
     del a
     # the cut tops of the walls
     cap = (92, 80, 72)
-    pygame.draw.polygon(surf, cap, [P(0, 0, CUT_H), P(r.w, 0, CUT_H), P(r.w, -t, CUT_H), P(-t, -t, CUT_H)])
-    pygame.draw.polygon(surf, art.shade(cap, 1.12), [P(0, 0, CUT_H), P(0, r.d, CUT_H), P(-t, r.d, CUT_H), P(-t, -t, CUT_H)])
-    pygame.draw.lines(surf, art.shade(cap, 0.6), False,
-                      [P(-t, r.d, CUT_H), P(-t, -t, CUT_H), P(r.w, -t, CUT_H)], 2)
+    if r.round:       # a curved cut along the glass wall's back half
+        b0, b1 = roundroom.BACK
+        n = 48
+        for i in range(n):
+            a0, a1 = b0 + (b1 - b0) * i / n, b0 + (b1 - b0) * (i + 1) / n
+            pygame.draw.polygon(surf, art.shade(cap, roundroom.shade_for((a0 + a1) / 2) * 1.15),
+                                [P(*roundroom.arc(r, a0), CUT_H), P(*roundroom.arc(r, a1), CUT_H),
+                                 P(*roundroom.arc(r, a1, r.rad + 0.14), CUT_H), P(*roundroom.arc(r, a0, r.rad + 0.14), CUT_H)])
+        pygame.draw.lines(surf, art.shade(cap, 0.6), False,
+                          [P(*roundroom.arc(r, b0 + (b1 - b0) * i / n, r.rad + 0.14), CUT_H) for i in range(n + 1)], 2)
+    else:
+        pygame.draw.polygon(surf, cap, [P(0, 0, CUT_H), P(r.w, 0, CUT_H), P(r.w, -t, CUT_H), P(-t, -t, CUT_H)])
+        pygame.draw.polygon(surf, art.shade(cap, 1.12), [P(0, 0, CUT_H), P(0, r.d, CUT_H), P(-t, r.d, CUT_H), P(-t, -t, CUT_H)])
+        pygame.draw.lines(surf, art.shade(cap, 0.6), False,
+                          [P(-t, r.d, CUT_H), P(-t, -t, CUT_H), P(r.w, -t, CUT_H)], 2)
     # furniture, as Game.draw does it (flat things first, then depth-sorted)
     g.room, g.screen = r, surf
     for o in r.objs:

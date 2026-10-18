@@ -24,6 +24,7 @@ doorways kept clear, reachability and every possible key hiding place.
 
 from __future__ import annotations
 
+import math
 import random
 from collections import deque
 
@@ -60,9 +61,12 @@ STYLES = {
 }
 
 
-def R(name, floor, map_pos, size, style, furn=(), wall=(), enemies=()):
+def R(name, floor, map_pos, size, style, furn=(), wall=(), enemies=(), shape="square"):
     return dict(name=name, floor=floor, map=map_pos, size=size, style=style,
-                furn=list(furn), wall=list(wall), enemies=list(enemies))
+                furn=list(furn), wall=list(wall), enemies=list(enemies), shape=shape)
+
+
+ROUND_RIM = 0.35    # a round room's cells count as floor when their centre is this far inside the wall
 
 
 ROOMS = {
@@ -75,10 +79,11 @@ ROOMS = {
         furn=[("fireplace", 3, 0, "S"), ("armchair", 2, 1, "auto"), ("armchair", 5, 1, "auto"), ("sofa", 0, 5, "E"),
               ("round_table", 6, 4, "S"), ("rug", 3, 3, "S"), ("piano", 6, 0, "S")],
         wall=[("painting_lady", "N", 1), ("mirror", "W", 0), ("window", "W", 5)], enemies=["ghost"]),
+    # round: a circle of iron and glass inscribed in the 8x8 grid (see Room.round)
     "conservatory": R("Conservatory", "ground", (0, 0), (8, 8), "glass",
-        furn=[("potted_palm", 0, 0, "E"), ("potted_palm", 0, 7, "E"), ("statue", 7, 0, "S"), ("potted_palm", 3, 0, "S"),
-              ("round_table", 4, 4, "S"), ("chair", 5, 4, "auto"), ("chest", 1, 5, "S")],
-        wall=[("window", "N", 2), ("window", "N", 5), ("window", "W", 2), ("window", "W", 5)], enemies=["bat", "goblin"]),
+        furn=[("potted_palm", 1, 1, "E"), ("potted_palm", 6, 1, "S"), ("potted_palm", 1, 6, "E"), ("statue", 3, 0, "S"),
+              ("round_table", 5, 5, "S"), ("chair", 6, 5, "auto"), ("chest", 0, 3, "E"), ("candelabra", 4, 0, "S")],
+        enemies=["bat", "goblin"], shape="round"),
     "music_room": R("Music Room", "ground", (0, 1), (8, 7), "blue",
         furn=[("piano", 0, 0, "E"), ("harp", 6, 0, "S"), ("chair", 2, 3, "auto"), ("chair", 5, 3, "auto"), ("candelabra", 0, 5, "S")],
         wall=[("painting_landscape", "N", 1), ("painting_lady", "W", 3)], enemies=["ghost"]),
@@ -281,6 +286,15 @@ class Room:
         self.floor = spec["floor"]
         self.map = tuple(spec["map"])
         self.w, self.d = spec["size"]
+        # a round room: a circle of radius rad round (cx, cy) on the floor;
+        # cells whose centre is outside rad - ROUND_RIM are void (not floor)
+        self.round = spec.get("shape", "square") == "round"
+        self.cx, self.cy = self.w / 2.0, self.d / 2.0
+        self.rad = min(self.w, self.d) / 2.0
+        self.void = set()
+        if self.round:
+            self.void = {(x, y) for x in range(self.w) for y in range(self.d)
+                         if math.hypot(x + 0.5 - self.cx, y + 0.5 - self.cy) > self.rad - ROUND_RIM}
         self.style = STYLES[spec["style"]]
         self.style_name = spec["style"]
         self.doors = {}     # side -> dict(to=room id, at=first tile index)
@@ -397,7 +411,30 @@ class Room:
         return out
 
     def inside(self, c):
-        return 0 <= c[0] < self.w and 0 <= c[1] < self.d
+        return 0 <= c[0] < self.w and 0 <= c[1] < self.d and c not in self.void
+
+    def in_door_way(self, x, y, margin=0.0):
+        """(x, y) is in the straight run-in to one of the doorways (the last
+        1.5 tiles before the edge), where a round room's wall is cut away."""
+        for side in self.doors:
+            rng = self.door_range(side)
+            a, b = rng.start + margin, rng.stop - margin
+            if (side == "S" and a <= x <= b and y >= self.d - 1.5) or (side == "N" and a <= x <= b and y <= 1.5) or \
+                    (side == "E" and a <= y <= b and x >= self.w - 1.5) or (side == "W" and a <= y <= b and x <= 1.5):
+                return True
+        return False
+
+    def clamp_round(self, x, y, margin):
+        """A round room keeps things inside its wall: (x, y) pulled back onto
+        the circle of radius rad - margin (doorway run-ins excepted)."""
+        if not self.round or self.in_door_way(x, y, margin):
+            return x, y
+        dx, dy = x - self.cx, y - self.cy
+        d = math.hypot(dx, dy)
+        lim = self.rad - margin
+        if d <= lim:
+            return x, y
+        return self.cx + dx / d * lim, self.cy + dy / d * lim
 
     def walkable(self, c, blocked=None):
         if not self.inside(c):
@@ -453,7 +490,7 @@ class Room:
         flat = {c for o in self.objs if o.t["kind"] == "flat" for c in o.cells()}
         clear = self.keep_clear()
         return [(x, y) for x in range(self.w) for y in range(self.d)
-                if (x, y) not in blocked and (x, y) not in trig and (x, y) not in flat and (x, y) not in clear]
+                if (x, y) not in self.void and (x, y) not in blocked and (x, y) not in trig and (x, y) not in flat and (x, y) not in clear]
 
     def reset_pushables(self):
         for o in self.objs:

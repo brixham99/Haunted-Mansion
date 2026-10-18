@@ -29,6 +29,7 @@ import numpy as np
 import pygame
 
 import art
+import roundroom
 import coop as C
 import mansion as M
 import net
@@ -927,6 +928,8 @@ class Game:
         x, y = c
         if r.inside(c):
             return c in solid
+        if c in r.void:          # a round room: the curved wall itself stops you (see move_player)
+            return False
         for side in r.doors:   # outside the room only the doorway gaps are open
             rng = r.door_range(side)
             if (side == "N" and y == -1 and x in rng) or (side == "S" and y == r.d and x in rng) or \
@@ -971,6 +974,7 @@ class Game:
         """Axis-separated move with corner sliding; returns the cell bumped."""
         solid = self.room.solid_cells()
         bumped = None
+        x0, y0 = self.px, self.py
         step = PLAYER_SPEED * dt * (0.7071 if (dx and dy) else 1.0)
         for axis, d in ((0, dx), (1, dy)):
             if not d:
@@ -1005,6 +1009,13 @@ class Game:
                 elif axis == 1 and self.box_hits(self.px + move, self.py, solid) is None:
                     self.px += move
                 break
+        if self.room.round:      # slide round the curved wall
+            cx, cy = self.room.clamp_round(self.px, self.py, PLAYER_R)
+            if (cx, cy) != (self.px, self.py):
+                if self.box_hits(cx, cy, solid) is None:
+                    self.px, self.py = cx, cy
+                else:
+                    self.px, self.py = x0, y0
         return bumped
 
     # ------------------------------------------------------------ update
@@ -1470,7 +1481,7 @@ class Game:
             tx, ty = px, py
         else:
             if e.wander is None or math.hypot(e.wander[0] - e.x, e.wander[1] - e.y) < 0.2:
-                e.wander = (e.rng.uniform(0.6, r.w - 0.6), e.rng.uniform(0.6, r.d - 0.6))
+                e.wander = r.clamp_round(e.rng.uniform(0.6, r.w - 0.6), e.rng.uniform(0.6, r.d - 0.6), 0.6)
             tx, ty = e.wander
         vx, vy = tx - e.x, ty - e.y
         n = math.hypot(vx, vy) or 1
@@ -1480,6 +1491,7 @@ class Game:
             vx, vy = vx * math.cos(a) - vy * math.sin(a), vx * math.sin(a) + vy * math.cos(a)
         e.x = min(r.w - 0.3, max(0.3, e.x + vx / n * sp * dt))
         e.y = min(r.d - 0.3, max(0.3, e.y + vy / n * sp * dt))
+        e.x, e.y = r.clamp_round(e.x, e.y, 0.35)
         if abs(vx - vy) > 0.01:
             e.left = (vx - vy) < 0
 
@@ -1490,6 +1502,9 @@ class Game:
             goal = None
             if chase:
                 goal = (min(r.w - 1, max(0, int(px))), min(r.d - 1, max(0, int(py))))
+                if not r.inside(goal):     # (a round room's rim) the nearest floor tile
+                    goal = min(((x, y) for x in range(r.w) for y in range(r.d) if r.inside((x, y))),
+                               key=lambda c: (c[0] + .5 - px) ** 2 + (c[1] + .5 - py) ** 2)
             elif not e.path:
                 free = r.free_floor()
                 goal = e.rng.choice(free) if free else None
@@ -1586,6 +1601,10 @@ class Game:
         st = r.style
         rnd = random.Random(r.id)
         P = lambda x, y, z=0.0: self.P(x, y, z, r)
+        if r.round:     # the conservatory: a circle of iron and glass
+            roundroom.draw_background(self, s, r, rnd)
+            self._draw_thresholds(s, r)
+            return s
         # floor slab along the open front edges
         pygame.draw.polygon(s, art.shade(st["f2"], 0.45), [P(0, r.d), P(r.w, r.d), P(r.w, r.d, -SLAB), P(0, r.d, -SLAB)])
         pygame.draw.polygon(s, art.shade(st["f2"], 0.32), [P(r.w, 0), P(r.w, r.d), P(r.w, r.d, -SLAB), P(r.w, 0, -SLAB)])
@@ -1622,6 +1641,23 @@ class Game:
         if kind in ("boards", "planks"):
             for kk in range(r.d * 3 + 1):
                 pygame.draw.line(s, art.shade(st["f2"], 0.6), P(0, kk / 3), P(r.w, kk / 3), 1)
+        self._draw_thresholds(s, r)
+        self._draw_wall(s, r, "N")
+        self._draw_wall(s, r, "W")
+        for o in r.walls:
+            img = self.art.wall(o.type, o.side)
+            n = T[o.type]["size"][0]
+            top_z = o.mount + T[o.type]["h"]
+            if o.side == "N":
+                x0, y0 = P(o.index, 0)[0], P(o.index, 0, top_z)[1]
+            else:
+                x0, y0 = P(0, o.index + n)[0], P(0, o.index, top_z)[1]
+            s.blit(img, (round(x0), round(y0)))
+        return s
+
+    def _draw_thresholds(self, s, r):
+        st = r.style
+        P = lambda x, y, z=0.0: self.P(x, y, z, r)
         # thresholds beyond the open (front) doorways, fading into the dark
         for side in ("S", "E"):
             rng = r.door_range(side)
@@ -1636,18 +1672,6 @@ class Game:
                 else:
                     poly = [P(r.w + t0, a), P(r.w + t0, b), P(r.w + t1, b), P(r.w + t1, a)]
                 pygame.draw.polygon(s, c, poly)
-        self._draw_wall(s, r, "N")
-        self._draw_wall(s, r, "W")
-        for o in r.walls:
-            img = self.art.wall(o.type, o.side)
-            n = T[o.type]["size"][0]
-            top_z = o.mount + T[o.type]["h"]
-            if o.side == "N":
-                x0, y0 = P(o.index, 0)[0], P(o.index, 0, top_z)[1]
-            else:
-                x0, y0 = P(0, o.index + n)[0], P(0, o.index, top_z)[1]
-            s.blit(img, (round(x0), round(y0)))
-        return s
 
     def _draw_parquet(self, s, r, rnd):
         """Oak herringbone parquet. Every block runs along one of the two
@@ -1772,6 +1796,8 @@ class Game:
         for o in r.walls:
             if o.type == "window":
                 lights.append((self.P(o.index + .5, 1.2, 0, r) if o.side == "N" else self.P(1.2, o.index + .5, 0, r), 170))
+        if r.round:
+            lights += roundroom.moon_pools(self, r)
         for (lx, ly), rad in lights:
             dd = np.sqrt((xx - lx) ** 2 + ((yy - ly) * 1.6) ** 2) / rad
             a -= 75 * np.clip(1 - dd, 0, 1)
@@ -1873,6 +1899,8 @@ class Game:
         s.blit(dark, (0, 0))
         if fd is not None and self.door_t is not None:
             self.draw_moonlight(fd)
+        if r.round:
+            self.draw_round_front(r)
         self.draw_exit_frames(r)
         t = self.time
         for o in r.objs:
@@ -1915,6 +1943,21 @@ class Game:
             s.blit(veil, (0, 0))
         if self.mode == "end":
             self.draw_end()
+
+    def draw_round_front(self, r):
+        """A round room's cut-away front: the low curb and mullion stubs,
+        over the room so it hides feet behind it; fading for anyone close."""
+        key = (r.id, "round_front")
+        if key not in self.ghost_cache:
+            self.ghost_cache[key] = roundroom.front_layer(self, r)
+        layer, at = self.ghost_cache[key]
+        who = [(e.x, e.y) for e in self.enemies]
+        if self.out is None:
+            who.append((self.px, self.py))
+        if self.coop is not None and self.coop.partner_here():
+            who.append((self.coop.partner.x, self.coop.partner.y))
+        layer.set_alpha(int(roundroom.FRONT_ALPHA * roundroom.front_fade(r, who)))
+        self.screen.blit(layer, at)
 
     # ------------------------------------------------------------ exit door frames
     def ghost_frame(self, r, side):
@@ -2386,8 +2429,12 @@ class Game:
                 seen = r.id in self.visited
                 here = r.id == self.room.id
                 fill = (160, 86, 30) if here else ((72, 56, 64) if seen else (24, 20, 28))
-                pygame.draw.rect(s, fill, (rx, ry, cw, ch), border_radius=4)
-                pygame.draw.rect(s, (200, 150, 90) if seen else (56, 46, 56), (rx, ry, cw, ch), 2, border_radius=4)
+                if r.round:    # the conservatory is round
+                    pygame.draw.ellipse(s, fill, (rx, ry, cw, ch))
+                    pygame.draw.ellipse(s, (200, 150, 90) if seen else (56, 46, 56), (rx, ry, cw, ch), 2)
+                else:
+                    pygame.draw.rect(s, fill, (rx, ry, cw, ch), border_radius=4)
+                    pygame.draw.rect(s, (200, 150, 90) if seen else (56, 46, 56), (rx, ry, cw, ch), 2, border_radius=4)
                 if self.coop is not None and self.coop.partner.seen and self.coop.partner.room == r.id:
                     pygame.draw.rect(s, (110, 220, 170), (rx - 3, ry - 3, cw + 6, ch + 6), 3, border_radius=6)
                     ini = self.text(self.f_map, self.coop.partner_name, (150, 255, 200))
