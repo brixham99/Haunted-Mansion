@@ -96,18 +96,19 @@ ROOMS = {
     "music_room": R("Music Room", "ground", (0, 1), (8, 7), "blue",
         furn=[("piano", 0, 0, "E"), ("harp", 6, 0, "S"), ("chair", 2, 3, "auto"), ("chair", 5, 3, "auto"), ("candelabra", 0, 5, "S")],
         wall=[("painting_landscape", "N", 1), ("painting_lady", "W", 3)], enemies=["ghost"]),
-    "west_corridor": R("West Corridor", "ground", (1, 1), (9, 4), "wood",
-        # its doorways sit one tile south of centre, in line with the hall's door (beside the staircase)
+    "west_corridor": R("West Corridor", "ground", (1, 1), (9, 5), "wood",
+        # 5 deep, its two doorways two tiles south of centre, in line with the hall's door (beside the staircase)
+        # and the Music Room's; no doors to the Drawing Room or the Dining Room
         furn=[("suit_of_armour", 1, 0, "S"), ("suit_of_armour", 6, 0, "S"), ("chair", 8, 0, "auto")],
         wall=[("painting", "N", 7), ("painting_lady", "N", 0)], enemies=["goblin"]),
     "staircase_hall": R("Staircase Hall", "ground", (2, 1), (8, 8), "hall",
-        # the grand staircase: a 2-tile flight from the middle of the room up to the
-        # top of the west wall (beside the West Corridor door, on its right); its
+        # the grand staircase: a 2-tile flight centred across the hall, from the middle up
+        # to the top of the west wall (beside the West Corridor door, on its right); its
         # stairs_up link sits at the foot of the flight (you go up from the top)
-        furn=[("stairs_up", 3, 1, "E", "landing"), ("grandfather_clock", 0, 0, "S"), ("statue", 0, 7, "E"),
+        furn=[("stairs_up", 3, 3, "E", "landing"), ("grandfather_clock", 0, 0, "S"), ("statue", 0, 7, "E"),
               ("candelabra", 7, 0, "S"), ("potted_palm", 7, 7, "S")],
         wall=[("painting", "W", 7), ("painting_landscape", "N", 5)], enemies=["ghost"],
-        grand=dict(kind="stairs", swap=True, x0=1, x1=3, y1=5)),
+        grand=dict(kind="stairs", swap=True, x0=3, x1=5, y1=5)),
     "east_corridor": R("East Corridor", "ground", (3, 1), (9, 4), "wood",
         furn=[("suit_of_armour", 7, 0, "S"), ("potted_palm", 0, 0, "S"), ("round_table", 1, 3, "S"), ("chair", 6, 3, "auto")],
         wall=[("painting", "N", 2), ("painting_lady", "N", 5), ("cobweb", "N", 8)], enemies=["skeleton"]),
@@ -230,10 +231,10 @@ ROOMS = {
 # (room, side, other room); the other room's door is on the opposite side.
 DOORS = [
     ("entrance_hall", "S", "staircase_hall"), ("entrance_hall", "W", "drawing_room"), ("entrance_hall", "E", "study"),
-    ("drawing_room", "W", "conservatory"), ("drawing_room", "S", "west_corridor"),
+    ("drawing_room", "W", "conservatory"),
     ("conservatory", "S", "music_room"), ("study", "E", "library"), ("library", "S", "billiard_room"),
-    ("staircase_hall", "W", "west_corridor", {"at": 4, "at_other": 2}), ("staircase_hall", "E", "east_corridor"), ("staircase_hall", "S", "kitchen"),
-    ("west_corridor", "W", "music_room", {"at": 2, "at_other": 3}), ("west_corridor", "S", "dining_room"),
+    ("staircase_hall", "W", "west_corridor", {"at": 5, "at_other": 3}), ("staircase_hall", "E", "east_corridor"), ("staircase_hall", "S", "kitchen"),
+    ("west_corridor", "W", "music_room", {"at": 3, "at_other": 4}),
     ("east_corridor", "E", "billiard_room"), ("east_corridor", "S", "scullery"),
     ("ballroom", "N", "music_room"), ("ballroom", "E", "dining_room"), ("dining_room", "E", "kitchen"),
     ("kitchen", "E", "scullery"),

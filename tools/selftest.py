@@ -606,32 +606,32 @@ def grand_stairs_checks(g):
         check(not bad, f"{r.name}: the key never turns up on the stairs or in the drop {bad[:3]}")
         free = set(r.free_floor())
         check(not (free & (r.flight | r.well)), f"{r.name}: no free floor (baddie spawns) on the stairs or in the drop")
-    p = hall.path((1, 0), (1, 4))
+    p = hall.path((1, 0), (1, 6))
     check(p is not None and not (set(p) & hall.flight), f"baddies path round the foot of the stairs ({len(p or [])} tiles)")
     p = land.path((1, 3), (6, 4))
     check(p is not None and not (set(p) & land.well), f"and round the gallery ({len(p or [])} tiles)")
     # heights: up the steps to the top, flat floor off them
-    zs = [hall.floor_z(5.0 - k * 0.25, 2.0) for k in range(1, 20)]
-    check(all(b >= a for a, b in zip(zs, zs[1:])) and zs[-1] >= hall.STAIR_TOP * 0.8 and hall.floor_z(3, 3.5) == 0
-          and hall.floor_z(5.2, 2.0) == 0 and hall.STAIR_TOP == G.WALL_H, f"the steps rise to the top ({zs[0]:.0f} -> {zs[-1]:.0f} px), the floor beside them is flat")
+    zs = [hall.floor_z(5.0 - k * 0.25, 4.0) for k in range(1, 20)]
+    check(all(b >= a for a, b in zip(zs, zs[1:])) and zs[-1] >= hall.STAIR_TOP * 0.8 and hall.floor_z(3, 5.5) == 0
+          and hall.floor_z(5.2, 4.0) == 0 and hall.STAIR_TOP == G.WALL_H, f"the steps rise to the top ({zs[0]:.0f} -> {zs[-1]:.0f} px), the floor beside them is flat")
     # walking: banisters stop you both ways, then up the stairs to the Landing
     god = g.god
     g.god = True
     g.enter_room("staircase_hall", None)
     g.enemies, g.fade = [], None
-    g.px, g.py = 3.0, 3.5
+    g.px, g.py = 3.0, 5.5
     for _ in range(60):
         g.move_player(0, -1, DT)
-    check(g.py >= 3 + G.PLAYER_R - 1e-3, f"the banister stops you climbing on from the side ({g.py:.2f})")
-    g.px, g.py = 3.0, 2.0
+    check(g.py >= 5 + G.PLAYER_R - 1e-3, f"the banister stops you climbing on from the side ({g.py:.2f})")
+    g.px, g.py = 3.0, 4.0
     for _ in range(60):
         g.move_player(0, 1, DT)
-    check(g.py <= 3 - G.PLAYER_R + 1e-3, f"and stepping off the side of the flight ({g.py:.2f})")
-    g.px, g.py = 5.6, 3.15
+    check(g.py <= 5 - G.PLAYER_R + 1e-3, f"and stepping off the side of the flight ({g.py:.2f})")
+    g.px, g.py = 5.6, 5.15
     for _ in range(40):
         g.move_player(-1, 0, DT)
     check(g.px >= 5.0, f"the newel posts stand at the foot ({g.px:.2f})")
-    g.px, g.py, g.facing = 5.6, 2.0, "W"
+    g.px, g.py, g.facing = 5.6, 4.0, "W"
     zs, n = [], 0
     while g.room is hall and n < 400:
         g.update(DT, ctrl=g.steer((-1, 0), False))
@@ -655,8 +655,8 @@ def grand_stairs_checks(g):
     g.draw()
     check(not g.grand_fade, "and not when nobody is behind it")
     # depth: on the flight, drawn over the row underfoot and under the rows below
-    box = grand.figure_box(hall, 3.3, 2.0, G.PLAYER_R)
-    order = G.depth_sort([((3, 1, 4, 3), "row3"), ((4, 1, 5, 3), "row4"), (box, "me")])
+    box = grand.figure_box(hall, 3.3, 4.0, G.PLAYER_R)
+    order = G.depth_sort([((3, 3, 4, 5), "row3"), ((4, 3, 5, 5), "row4"), (box, "me")])
     check([w for _, w in order] == ["row3", "me", "row4"], f"on the stairs: the step underfoot behind, the lower steps in front {[w for _, w in order]}")
     g.px, g.py, g.fade = 1.5, 4.0, None
     g.facing = "E"
@@ -672,9 +672,16 @@ def grand_stairs_checks(g):
     # the West Corridor lines up: the hall's door, both of its doors and the Music Room's
     wc, mr = h.rooms["west_corridor"], h.rooms["music_room"]
     offs = [r.doors[sd]["at"] - (r.side_len(sd) - M.DOOR_W) // 2 for r, sd in ((hall, "W"), (wc, "E"), (wc, "W"), (mr, "E"))]
-    check(offs == [1, 1, 1, 1], f"the West Corridor's doorways all moved along together, one tile south {offs}")
+    check(offs == [2, 2, 2, 2], f"the West Corridor's doorways all line up, two tiles south of centre {offs}")
     hw = hall.door_cells("W")
-    check(all(c[1] >= 3 for c in hw) and hall.doors["N"]["at"] == 3, f"the corridor door beside the stairs, the Entrance Hall door back in the middle {hw}")
+    check(all(c[1] >= 5 for c in hw) and hall.doors["N"]["at"] == 3, f"the corridor door beside the stairs, the Entrance Hall door back in the middle {hw}")
+    gd = hall.grand
+    check(gd["x0"] + gd["x1"] == hall.d, f"the flight is centred across the hall (banisters at y {gd['x0']} and {gd['x1']})")
+    wc_doors = set(wc.doors)
+    check(wc_doors == {"E", "W"} and "S" not in h.rooms["drawing_room"].doors and "N" not in h.rooms["dining_room"].doors,
+          f"the West Corridor has no doors to the Drawing Room or the Dining Room ({sorted(wc_doors)})")
+    for rid in ("drawing_room", "dining_room"):
+        check(len(h.route("staircase_hall", rid)) > 1, f"the {h.rooms[rid].name} still has a way in")
     print(f"grand stairs: flight {len(hall.flight)} tiles up to {hall.STAIR_TOP} px, well {len(land.well)} tiles, "
           f"{len(grand.layers(g, hall))}+{len(grand.layers(g, land))} layers")
 

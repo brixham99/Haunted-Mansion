@@ -432,9 +432,9 @@ def main():
     host.enter_room("staircase_hall", None)
     cli.enter_room("staircase_hall", None)
     host.enemies, cli.enemies = [], []
-    host.px, host.py, cli.px, cli.py = 3.0, 2.0, 6.5, 6.5
+    host.px, host.py, cli.px, cli.py = 3.0, 4.0, 6.5, 6.5
     wait(games, lambda: not cli.fade and not host.fade and cli.coop.partner_here()
-         and abs(cli.coop.partner.x - 3.0) < 0.05 and abs(cli.coop.partner.y - 2.0) < 0.05, 240)
+         and abs(cli.coop.partner.x - 3.0) < 0.05 and abs(cli.coop.partner.y - 4.0) < 0.05, 240)
     seen = []
     orig = cli.draw_player_shadow
     cli.draw_player_shadow = lambda gx, gy, *a: (seen.append((gx, gy)), orig(gx, gy, *a))
@@ -445,10 +445,10 @@ def main():
     up = [fy - gy for gx, gy in seen if abs(gx - fx) < 2]
     z = cli.room.floor_z(p.x, p.y)
     check(up and abs(up[0] - z) < 2 and z > 60, f"the joiner draws the host up the grand staircase ({up} px, z {z:.0f})")
-    host.px, host.py = 3.0, 3.5
+    host.px, host.py = 3.0, 5.5
     for _ in range(30):
         host.move_player(0, -1, DT)
-    check(host.py >= 3 + G.PLAYER_R - 1e-3, f"and its banisters stop either player ({host.py:.2f})")
+    check(host.py >= 5 + G.PLAYER_R - 1e-3, f"and its banisters stop either player ({host.py:.2f})")
     host.enter_room("entrance_hall", None)
     cli.enter_room("entrance_hall", None)
     wait(games, lambda: not cli.fade and not host.fade, 60)
