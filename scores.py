@@ -140,6 +140,14 @@ def clean_name(text: str) -> str:
     return " ".join(out.split())[:NAME_MAX]
 
 
+def submit_name(text: str) -> str:
+    """The name as it goes on the board: clean_name, with a lowercase first
+    letter capitalised ("archie" -> "Archie", "mcDuff" -> "McDuff"); the
+    rest stays as typed."""
+    name = clean_name(text)
+    return name[:1].upper() + name[1:] if name[:1].islower() else name
+
+
 class Leaderboard:
     """dreamlo Top 10 plus a local cache. All network calls run on daemon
     threads with a short timeout, so the game never waits and never crashes
@@ -301,7 +309,7 @@ class Leaderboard:
         self._spawn()
 
     def submit(self, name: str, score: int):
-        name = clean_name(name)
+        name = submit_name(name)
         with self.lock:
             self.last_name = name or self.last_name
             self.local_best = max(self.local_best, int(score))

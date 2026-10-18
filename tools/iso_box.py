@@ -540,10 +540,79 @@ def build_piano():
     return sc
 
 
+LADDER_TOP = 254          # px: the rails' tops, up through the hatch
+
+
+def build_ladder_up():
+    """The loft ladder, built rather than cut: two leaning rails and round
+    rungs in worn oak, feet on the floor out from the wall, tops resting on
+    the back edge of a framed hatch in the ceiling at the wall's top. All
+    edges exact 2:1: the rails lean in the x-z plane only (verticals stay in
+    their planes), and the hatch frame is four boards on the ceiling line."""
+    from objects import WALL_H
+    F = faces()
+    sc = Scene("ladder_up")
+    oak = np.array([104, 74, 47], np.float32)
+    g = F["cd_side"]
+
+    def wood(w, h, k=1.0, rotate=False):
+        return tinted(lum_grain(g, (max(4, int(w)), max(4, int(h))), rotate=rotate), oak * k)
+
+    hz = WALL_H
+    dark = Image.new("RGBA", (8, 8), (10, 7, 6, 255))
+    # the hatch: a dark opening into the loft, framed by boards on the ceiling line
+    hx0, hx1, hy0, hy1, bw, bt = 0.0, 0.66, 0.12, 0.88, 0.07, 9
+    sc.quad(dark, (hx0, hy1, hz), (hx0, hy0, hz), (hx1, hy1, hz))
+    # the shaft's far walls, seen up through the opening (dim boards)
+    sc.quad(wood(60, 30, 0.35), (hx0 + 0.01, hy1, hz + 26), (hx0 + 0.01, hy0, hz + 26), (hx0 + 0.01, hy1, hz), 1.0)
+    sc.quad(wood(60, 30, 0.28), (hx0, hy0 + 0.01, hz + 26), (hx1, hy0 + 0.01, hz + 26), (hx0, hy0 + 0.01, hz), 1.0)
+    boards = {"back": (hx0 - 0.02, hy0 - bw, hx0 + 0.03, hy1 + bw), "right": (hx0, hy0 - bw, hx1 + bw, hy0),
+              "left": (hx0, hy1, hx1 + bw, hy1 + bw), "front": (hx1, hy0 - bw, hx1 + bw, hy1 + bw)}
+
+    def board(k):
+        x0, y0, x1, y1 = boards[k]
+        L, D = (y1 - y0) * TE * 2, (x1 - x0) * TE * 2
+        sc.box(x0, y0, hz, x1, y1, hz + bt, front=wood(L, bt * 2, 0.8), side=wood(D, bt * 2, 0.7),
+               top=wood(L, D, 1.0, rotate=True))
+
+    board("back")
+    board("right")
+    # the ladder: rails from the feet (xf, floor) to the tops (xt, LADDER_TOP)
+    xf, xt, zt = 0.64, 0.05, LADDER_TOP
+    yR, yL, rw, th = 0.22, 0.78, 0.065, 7.0          # rails' inner faces (tiles), rail width (tiles), depth (px)
+    dxp, dz = (xt - xf) * TE, zt
+    n = math.hypot(dxp, dz)
+    ox, oz = dz / n * th / TE, -dxp / n * th          # outward offset of the rails' front face (tiles, px)
+
+    def along(t):          # point on the back line of the ladder, t = 0 foot .. 1 top
+        return xf + (xt - xf) * t, zt * t
+
+    # rungs: round, every ~25 px, set into the rails' thickness
+    nr = int(zt // 25)
+    for i in range(1, nr + 1):
+        t = (i * 25 - 6) / zt
+        if t > 0.94:
+            break
+        x, z = along(t)
+        xm = x + ox * 0.5
+        sc.box(xm - 0.035, yR, z - 2.5, xm + 0.035, yL, z + 2.5, front=wood(70, 10, 0.95), side=wood(10, 10, 0.8),
+               top=wood(70, 10, 1.15, rotate=True))
+    Lpx = n * 2
+    for y0, y1 in ((yR - rw, yR), (yL, yL + rw)):
+        # side face (plane y = y1, the lower-left face), then the front (leaning) face
+        sc.quad(wood(th * 2, Lpx, 0.82), (xt, y1, zt), (xt + ox, y1, zt + oz), (xf, y1, 0), 1.0)
+        sc.quad(wood(rw * TE * 2, Lpx, 1.0), (xt + ox, y1, zt + oz), (xt + ox, y0, zt + oz), (xf + ox, y1, oz), 1.0)
+        # the rail's top end, cut level
+        sc.quad(wood(rw * TE * 2, th * 2, 1.1), (xt, y1, zt), (xt, y0, zt), (xt + ox, y1, zt), 1.0)
+    board("left")
+    board("front")
+    return sc
+
+
 BUILDS = {"fireplace": build_fireplace, "kitchen_dresser": build_kitchen_dresser,
           "chest_of_drawers": build_chest_of_drawers, "bookcase": build_bookcase, "wardrobe": build_wardrobe,
           "piano": build_piano, "grandfather_clock": build_grandfather_clock, "linen_press": build_linen_press,
-          "desk": build_desk, "toy_box": build_toy_box}
+          "desk": build_desk, "toy_box": build_toy_box, "ladder_up": build_ladder_up}
 
 
 def main(argv):

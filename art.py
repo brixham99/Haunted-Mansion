@@ -728,7 +728,6 @@ def w_window(f):
     f.ell(0, 0, W, 34, frame)
     f.rect(5, 18, W - 10, H - 24, (30, 46, 80))
     f.ell(5, 5, W - 10, 28, (30, 46, 80))
-    f.circ(W * 0.65, 30, 9, (230, 230, 200))
     f.line((W * 0.15, H - 8), (W * 0.35, 50), (14, 14, 18), 2)
     f.line((W * 0.3, 70), (W * 0.6, 60), (14, 14, 18), 1.5)
     f.line((W / 2, 8), (W / 2, H - 6), frame, 2)
@@ -958,7 +957,7 @@ ART_SCALE = {"pumpkin": 0.6, "suit_of_armour": 1.4, "statue": 1.1, "mangle": 1.1
 # piece shallower than its footprint still sits against the wall at the
 # right size.
 ISO_BOX_ART = {"fireplace", "kitchen_dresser", "chest_of_drawers", "bookcase", "wardrobe", "piano",
-               "grandfather_clock", "linen_press", "desk", "toy_box"}
+               "grandfather_clock", "linen_press", "desk", "toy_box", "ladder_up"}
 
 
 # Chairs and armchairs have a sprite per facing (front towards): E = lower

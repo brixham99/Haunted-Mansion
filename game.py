@@ -42,6 +42,26 @@ HW, HH = TILE_W // 2, TILE_H // 2
 SLAB = 18                      # floor thickness shown along the open front edges
 PLAYER_R = 0.24                # half-size of the player's collision box (tiles)
 PLAYER_SPEED = 3.0             # tiles per second
+# Furniture shadows: only legged pieces get one, a tight soft patch inset
+# from the footprint (tiles) right under them. Everything solid that stands
+# square on the floor (piano, fireplaces, wardrobes, bookcases, dressers,
+# clocks, chests, the range, the boiler...) gets none: the old soft patch
+# spread out past their base and they looked as if they floated.
+CONTACT_SHADOW = {"chair": 0.2, "armchair": 0.16, "round_table": 0.2, "dining_table": 0.14, "kitchen_table": 0.12,
+                  "billiard_table": 0.14, "sofa": 0.12, "bed": 0.12, "cot": 0.14, "bath": 0.14,
+                  "sewing_machine": 0.2, "mangle": 0.2, "candelabra": 0.3, "dummy": 0.32, "cauldron": 0.2,
+                  "rocking_horse": 0.22, "washstand": 0.14}
+# Baddies' shadows: soft pools like the player's (art.soft_shadow), radius
+# ENEMY_SHADOW_K x the sprite's width; fliers' pools shrink and fade with height.
+ENEMY_SHADOW_K = 0.46
+ENEMY_SHADOW_MAX = 58
+ENEMY_SHADOW_W = {"bat": 80, "skeleton": 96}   # animated frames: the body's width, not the frame's (wings, padding)
+ENEMY_POOL_A = 125             # the pool (soft_shadow fades from the centre, so this reads light)
+ENEMY_CORE_A = 150             # a darker core under walkers, where the feet are
+FLY_SHADOW_Z = 90.0           # px of height that halves a flier's shadow
+FLY_SHADOW_A = 150
+CONTACT_PAD = 8               # px of blur round the patch
+CONTACT_ALPHA = 105
 ENEMY_SPEED_SCALE = 0.6        # every baddie's speed (ENEMY_STATS, wander and chase) times this; 1.0 = original
 ENEMY_BOB_RATE = 8.0 * ENEMY_SPEED_SCALE ** 0.5   # walkers' step bob follows their (slower) pace
 # Animated enemies (frames cut by tools/cut_anims.py; art.ENEMY_ANIMS). Like
@@ -81,7 +101,7 @@ TOP10_TIME = 7.0               # s the title screen shows the controls, then the
 BOARD_REFRESH = 3600.0         # re-fetch the Top 10 (and retry unsent scores) hourly
 TITLE_NAME = "Haunted Mansion"
 TITLE_OPTIONS = ("Play alone", "Host a game", "Join a game")
-COPYRIGHT = "\u00a92026 Nathan, Archie & Holly Anderson. Working title."
+COPYRIGHT = "\u00a92026 Nathan, Archie & Holly Anderson. Made in England by Optica."
 TITLE_BACKDROP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "art", "title_backdrop.jpg")
 TITLE_DIM = 0.64                  # the painting at ~64% brightness, before the vignette
 TITLE_MOON = (198, 146)           # where the moon is in the painting (px)
@@ -641,7 +661,7 @@ class Game:
 
     def entry_key(self, key):
         if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-            name = scores.clean_name(self.entry_name)
+            name = scores.submit_name(self.entry_name)   # "archie" goes on the board as "Archie"
             if not name:
                 return          # type a name first (Esc skips)
             self.entry_active = False
@@ -2176,29 +2196,38 @@ class Game:
         self.screen.blit(img, (round(cx - img.get_width() / 2), round(bottom - img.get_height())))
 
     def draw_floor_shadow(self, o, x, y):
-        """A soft dark patch under a piece of furniture, so it stands on the floor."""
-        key = ("fshadow", o.gx, o.gy)
+        """A tight soft contact shadow right under a legged piece (CONTACT_SHADOW),
+        so it stands on the floor. Solid floor-standing pieces get none: a dark
+        patch spreading past their base made them look as if they floated."""
+        inset = CONTACT_SHADOW.get(o.type)
+        if inset is None:
+            return
+        key = ("fshadow", o.gx, o.gy, inset)
         sh = self.glow_cache.get(key)
         if sh is None:
             w, h = (o.gx + o.gy) * HW, (o.gx + o.gy) * HH
-            pad = 14
+            pad = CONTACT_PAD
             big = pygame.Surface((w + 2 * pad, h + 2 * pad), pygame.SRCALPHA)
             big.fill((0, 0, 0, 0))
-            pts = [(pad + o.gy * HW, pad), (pad + w, pad + o.gy * HH), (pad + o.gx * HW, pad + h), (pad, pad + o.gx * HH)]
-            pygame.draw.polygon(big, (0, 0, 0, 120), pts)
-            small = pygame.transform.smoothscale(big, (max(1, big.get_width() // 6), max(1, big.get_height() // 6)))
+
+            def Q(u, v):     # footprint (u along gx, v along gy) on this surface
+                return (pad + (o.gy + u - v) * HW, pad + (u + v) * HH)
+            a, b = inset, inset
+            pts = [Q(a, b), Q(o.gx - a, b), Q(o.gx - a, o.gy - b), Q(a, o.gy - b)]
+            pygame.draw.polygon(big, (0, 0, 0, CONTACT_ALPHA), pts)
+            small = pygame.transform.smoothscale(big, (max(1, big.get_width() // 4), max(1, big.get_height() // 4)))
             sh = pygame.transform.smoothscale(small, big.get_size())
             self.glow_cache[key] = sh
-        left = self.P(x, y + o.gy)[0] - 14
-        top = self.P(x, y)[1] - 14
+        left = self.P(x, y + o.gy)[0] - CONTACT_PAD
+        top = self.P(x, y)[1] - CONTACT_PAD
         self.screen.blit(sh, (round(left), round(top)))
 
     def draw_shadow(self, x, y, w=0.5):
+        """Soft shadow under a small thing on the floor (the key), cached by size."""
         cx, cy = self.P(x, y)
         rw = max(4, int(w * TILE_W * 0.55))
-        sh = pygame.Surface((rw * 2, rw), pygame.SRCALPHA)
-        pygame.draw.ellipse(sh, (0, 0, 0, 90), sh.get_rect())
-        self.screen.blit(sh, (cx - rw, cy - rw / 2))
+        sh = art.soft_shadow(rw * 1.1, rw * 0.5, 120)
+        self.screen.blit(sh, (round(cx - sh.get_width() / 2), round(cy - sh.get_height() / 2)))
 
     def draw_item(self, what):
         s = self.screen
@@ -2218,7 +2247,7 @@ class Game:
             img = self.art.enemy(e.kind, e.left)
             z = e.z0 + (8 * math.sin(e.phase * 2) if e.floats else 0)
             bob = 0 if e.floats else abs(math.sin(e.phase * ENEMY_BOB_RATE)) * 3
-            self.draw_shadow(e.x, e.y, e.r * 2)
+            self.draw_enemy_shadow(e, z if e.floats else 0, img.get_width())
             ex, ey = self.P(e.x, e.y, z + bob)
             if e.kind == "ghost":
                 img = img.copy()
@@ -2271,13 +2300,14 @@ class Game:
             return False
         img, ax, ay = fr
         s = self.screen
-        self.draw_shadow(e.x, e.y, e.r * 2)
         if e.floats:
             c = (e.phase * BAT_FPS / 4) % 1.0          # 0 wings up .. 0.5 wings down
             z = e.z0 + 8 * math.sin(e.phase * 2) - BAT_BOB * math.cos(2 * math.pi * c)
+            self.draw_enemy_shadow(e, z, ENEMY_SHADOW_W.get(e.kind, img.get_width()))
             ex, ey = self.P(e.x, e.y, z)
             s.blit(img, (round(ex - ax), round(ey - 26 - ay)))   # body centre where the old sprite's was
         else:
+            self.draw_enemy_shadow(e, 0, ENEMY_SHADOW_W.get(e.kind, img.get_width()))
             ex, ey = self.P(e.x, e.y, e.z0)
             jy = 0 if e.jolt <= 0 else (2 if e.jolt > SKEL_JOLT_S / 2 else 1)
             s.blit(img, (round(ex - ax), round(ey + 4 - ay + jy)))
@@ -2303,6 +2333,24 @@ class Game:
         x0, y0 = round(gx - ax), round(gy - ay)
         self.draw_player_shadow(gx, gy, x0, y0, feet, meta["facings"][k])
         self.screen.blit(img, (x0, y0))
+
+    def draw_enemy_shadow(self, e, z, sprite_w):
+        """A soft shadow like the player's (art.soft_shadow, cached per size):
+        a pool scaled to the sprite's width, plus a darker core under walkers.
+        Fliers (z above the floor) get a fainter, smaller pool that shrinks
+        and fades as they rise on their bob."""
+        s = self.screen
+        cx, cy = self.P(e.x, e.y)
+        rx = min(ENEMY_SHADOW_MAX, max(14.0, sprite_w * ENEMY_SHADOW_K))
+        if e.floats:
+            k = 1.0 / (1.0 + max(0.0, z) / FLY_SHADOW_Z)
+            sh = art.soft_shadow(rx * 0.85 * k, rx * 0.85 * k * 0.42, FLY_SHADOW_A * k)
+            s.blit(sh, (round(cx - sh.get_width() / 2), round(cy - sh.get_height() / 2)))
+            return
+        pool = art.soft_shadow(rx, rx * 0.42, ENEMY_POOL_A)
+        s.blit(pool, (round(cx - pool.get_width() / 2), round(cy - pool.get_height() / 2)))
+        core = art.soft_shadow(rx * 0.55, rx * 0.55 * 0.42, ENEMY_CORE_A)
+        s.blit(core, (round(cx - core.get_width() / 2), round(cy - core.get_height() / 2)))
 
     def draw_player_shadow(self, gx, gy, x0, y0, feet, fmeta):
         """Ground the figure: a soft pool where they stand, and a small dark

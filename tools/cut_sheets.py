@@ -20,7 +20,8 @@ placeholders.
   furn1_iso.jpg and furn8_iso.jpg, and those in turn by exact-2:1 pieces built
   by tools/iso_box.py (fireplace, dresser, chest of drawers, bookcase,
   wardrobe, piano, clock, linen press, desk, toy box) and the corner views in
-  organic_iso.jpg (armchair, chair, harp, rocking horse); the boiler and pumpkin by furn9_iso.jpg
+  organic_iso.jpg (armchair, chair, harp, rocking horse); the loft ladder is built
+  by iso_box.py too; the boiler and pumpkin by furn9_iso.jpg
   and pumpkin_iso.jpg (the pumpkin on the left of furn9_iso is not used).
 - Edges: soft alpha from the distance to white, with the white unmixed from
   the edge colour; then defringe(): rim pixels lighter than the paint just
@@ -31,10 +32,14 @@ placeholders.
 - Facing: the manifest wants furniture fronts towards the viewer's lower
   right; items painted the other way are mirrored (MIRROR below). Wall items
   are flat front views and are left as they are.
-- Pale grey painted ground shadows under furniture become translucent black
-  (fix_ground_shadow), so they darken the floor instead of lighting it.
+- Pale grey painted ground shadows under furniture are cut away
+  (fix_ground_shadow): painted as drop shadows off to one side, they made
+  pieces look as if they floated. The game draws its own tight contact
+  shadow under legged pieces instead (game.CONTACT_SHADOW).
 - Rugs are warped (perspective) so their four corners sit exactly on the
   footprint diamond, so they lie flat and fill their tiles.
+- The window's painted full moon is painted out (remove_window_moon): night
+  sky, stars, leading and curtains stay.
 - A light harmonise (HARMONISE) brings the painted colours a little closer to
   Archie and Holly.
 """
@@ -73,7 +78,8 @@ LAYOUT = {
     "pumpkin_iso.jpg": [["pumpkin"]],
     "wall.jpg": [["painting", "painting_lady", "painting_landscape", "mirror", "window", "cobweb"],
                  ["key", "sewing_machine"]],
-    "links.jpg": [["front_door", "door_frame", "stairs_up", "stairs_down", "ladder_up", "trapdoor"],
+    # links.jpg's ladder (too short, a hatch floating at chest height) is replaced by tools/iso_box.py's
+    "links.jpg": [["front_door", "door_frame", "stairs_up", "stairs_down", None, "trapdoor"],
                   ["rug", "rug_lifted"]],
 }
 
@@ -320,9 +326,10 @@ POCKETS_KEEP = {"washtub", "water_tank", "statue", "tomb", "suit_of_armour", "bo
 
 
 def fix_ground_shadow(img, pockets=True):
-    """Turn the painted pale-grey ground shadow (neutral light grey reached from
-    the outside, in the bottom of the sprite) into translucent black with the
-    same look over white, so it darkens the floor instead."""
+    """Cut away the painted pale-grey ground shadow (neutral light grey reached
+    from the outside, in the bottom of the sprite, plus enclosed pockets of it
+    between legs): it was painted offset to one side and read as a floating
+    drop shadow. (It used to become translucent black.)"""
     a = np.asarray(img).astype(np.float64)
     rgb, al = a[..., :3], a[..., 3] / 255.0
     h = a.shape[0]
@@ -341,8 +348,7 @@ def fix_ground_shadow(img, pockets=True):
     if not m.any():
         return img
     out = a.copy()
-    out[m, :3] = 0
-    out[m, 3] = np.clip((255.0 - seen.mean(axis=2)[m]) * 1.3, 0, 255)
+    out[m] = 0
     return Image.fromarray((out + 0.5).astype(np.uint8), "RGBA")
 
 
@@ -352,6 +358,57 @@ def fix_ground_shadow(img, pockets=True):
 KEY_WHITE = {"harp": 228, "chair": 228, "chair_ne": 228,
              "wine_rack": 232}       # the sheet's white between the painted cobweb strands at the back
 KEEP_SHINE = {"wine_rack"}            # ... but not the glints on the bottles
+
+
+def remove_window_moon(img, sill=0.88, pad=1.75):
+    """Paint the full moon (and its glow) out of the window's night sky.
+    The moon is the biggest bright blob; each glass pixel of the disc takes
+    the pixel of the same column from the clean glass below it (rows mapped
+    from the disc onto the band between it and the sill), so the vertical
+    mullions and the leading carry on unbroken; curtains are left alone. The
+    patch is matched to the brightness of the sky round it and feathered in."""
+    a = np.asarray(img.convert("RGBA")).astype(np.float64)
+    rgb, al = a[..., :3], a[..., 3]
+    L = rgb.mean(2)
+    h, w = L.shape
+    lab = label((L > 170) & (al > 200))
+    if lab.max() == 0:
+        return img, None
+    sizes = np.bincount(lab.ravel()); sizes[0] = 0
+    ys, xs = np.nonzero(lab == sizes.argmax())
+    cy, cx = ys.mean(), xs.mean()
+    r = max(xs.max() - xs.min(), ys.max() - ys.min()) / 2 + 2
+    R = r * pad                                   # the moon and its glow
+    yy, xx = np.mgrid[0:h, 0:w]
+    d = np.hypot((yy - cy), (xx - cx))
+    glass = (rgb[..., 2] > rgb[..., 0] + 8) & (al > 250)      # blue night glass and its leading, not the curtains
+    lead = (L < 45) & (al > 250)
+    curtain = (rgb[..., 0] > rgb[..., 2] - 4) & (L < 170) & ~lead
+    y0, y1 = int(cy - R), int(cy + R) + 1
+    s0, s1 = y1 + 2, int(h * sill)
+    out = rgb.copy()
+    for x in range(w):
+        col = [y for y in range(y0, y1) if d[y, x] < R and al[y, x] > 250 and not curtain[y, x]]
+        if not col:
+            continue
+        for y in col:
+            sy = int(s0 + (y - y0) * (s1 - s0) / max(1, (y1 - y0)))
+            for k in range(0, 12):
+                for yy2 in (sy + k, sy - k):
+                    if s0 <= yy2 < s1 and (glass[yy2, x] or lead[yy2, x]):
+                        out[y, x] = rgb[yy2, x]
+                        break
+                else:
+                    continue
+                break
+    ring = (d > R) & (d < R + 10) & glass
+    inner = (d < R) & (al > 250) & ~curtain
+    k = rgb[ring].mean(0) / np.maximum(1, out[inner].mean(0))
+    out[inner] *= np.clip(k, 0.7, 1.3)
+    m = (np.clip((R - d) / 6, 0, 1) * (al > 250) * ~curtain)[..., None]
+    res = a.copy()
+    res[..., :3] = rgb * (1 - m) + out * m
+    return Image.fromarray(np.clip(res + 0.5, 0, 255).astype(np.uint8), "RGBA"), (round(cx), round(cy), round(r))
 
 
 def key_white(img, thr, keep_shine=False):
@@ -480,6 +537,8 @@ def main(argv):
             if name not in NO_SHADOW_FIX:
                 img = fix_ground_shadow(img, pockets=name not in POCKETS_KEEP)
             img = harmonise(img)
+            if name == "window":
+                img = remove_window_moon(img)[0]
             if name in ("rug", "rug_lifted"):
                 img = flatten_rug(img, name)
             img.save(os.path.join(OUT, name + ".png"))

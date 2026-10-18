@@ -38,6 +38,8 @@ import pygame  # noqa: E402
 import game as G  # noqa: E402
 import mansion as M  # noqa: E402
 import roundroom  # noqa: E402
+import art  # noqa: E402
+from objects import T, WALL_H  # noqa: E402
 
 DT = 1 / 60
 FAILS = []
@@ -490,6 +492,40 @@ def exit_frame_checks(g):
     check(G.GHOST_FRAME_ALPHA / 255 <= 0.45 and 0.5 <= G.BACK_FRAME_ALPHA / 255 <= 0.65, "frame see-through levels")
 
 
+def shadow_checks(g):
+    """No floating shadows: only legged furniture gets a (tight) contact
+    shadow, no painted ground shadow is left in the art, baddies' shadows
+    are soft, the loft ladder reaches the ceiling, and no window shows the moon."""
+    import numpy as np
+    for name in ("piano", "fireplace", "wardrobe", "bookcase", "kitchen_dresser", "grandfather_clock",
+                 "range_cooker", "boiler", "chest_of_drawers", "desk"):
+        check(name not in G.CONTACT_SHADOW, f"{name}: no floor shadow")
+    check(all(n in T for n in G.CONTACT_SHADOW), "contact shadows only name real pieces")
+    baked = []
+    for name, t in T.items():
+        if t["kind"] not in ("furniture", "link"):
+            continue
+        p = os.path.join(art.ART_DIR, name + ".png")
+        if not os.path.exists(p):
+            continue
+        a = pygame.surfarray.pixels3d(pygame.image.load(p)).copy()
+        al = pygame.surfarray.pixels_alpha(pygame.image.load(p)).copy()
+        h = a.shape[1]
+        band = (slice(None), slice(int(h * 0.65), None))
+        m = (a[band].max(2) < 12) & (al[band] > 10) & (al[band] < 230)
+        if m.sum() > 400:      # translucent black: a painted ground shadow
+            baked.append((name, int(m.sum())))
+    check(not baked, f"no painted ground shadows left in the art {baked}")
+    sh = art.soft_shadow(30, 12, 120)
+    alpha = pygame.surfarray.pixels_alpha(sh)
+    check(alpha.max() <= 120 and 0 < alpha[2, 12] < alpha[30, 12], "enemy shadows are soft (fade out to the rim)")
+    del alpha
+    lad = g.art.base("ladder_up")
+    check(lad.get_height() >= 1.0 * WALL_H, f"the loft ladder reaches the ceiling ({lad.get_height()} px)")
+    win = pygame.surfarray.pixels3d(pygame.image.load(os.path.join(art.ART_DIR, "window.png"))).astype(int)
+    check(int((win.mean(2) > 200).sum()) < 40, f"no moon in the window ({int((win.mean(2) > 200).sum())} bright px)")
+
+
 def round_room_checks(g):
     """The round conservatory: floor, collision, key and enemies all keep
     to the circle, and its drawn outline is a true 2:1 iso ellipse."""
@@ -563,6 +599,7 @@ def main():
     anim_checks(g)
     exit_frame_checks(g)
     round_room_checks(g)
+    shadow_checks(g)
     # ---- full tour with enemies (invulnerable)
     if not args.quick:
         g.new_game(1)

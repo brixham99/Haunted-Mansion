@@ -227,6 +227,16 @@ def main():
     g.entry_key(pygame.K_RETURN)
     check(not g.entry_active and g.board.top()[0] == ("Holly An", 300, ""), f"submitted: {g.board.top()}")
     check(g.entry_status() == "Saved as Holly An", f"status {g.entry_status()!r}")
+    # a lowercase first letter is capitalised on the way in, and only that one
+    check([scores.submit_name(n) for n in ("archie", "mcDuff", "Holly", "9lives", "  bob")] ==
+          ["Archie", "McDuff", "Holly", "9lives", "Bob"], "submit_name capitalises only the first letter")
+    g.score = 310
+    g.lose(G.Enemy("ghost", 1, 1, g.rng))
+    g.entry_name = ""
+    g.entry_text("archie")
+    g.entry_key(pygame.K_RETURN)
+    check(("Archie", 310, "") in g.board.top() and g.entry_status() == "Saved as Archie",
+          f"typed 'archie', saved as 'Archie': {g.board.top()[:2]} / {g.entry_status()!r}")
     g.board.entries = [(f"P{i}", 1000 - i * 50, "GB") for i in range(10)]
     g.board.pending = []
     g.score = 100
@@ -264,6 +274,13 @@ def main():
     check(any(u.endswith(scores.DREAMLO_PRIVATE + "/add/Nathan/420/0/GB") for u in calls), "add URL with country")
     check(any(u.endswith(scores.DREAMLO_PUBLIC + "/json") for u in calls), "fetch from the public JSON")
     check(b.pending == [] and b.top() == [("Nathan", 420, "GB")], f"sent and parsed: {b.top()}")
+    calls.clear()
+    b.submit("mcDuff", 77)
+    for _ in range(100):
+        if not b.busy:
+            break
+        time.sleep(0.05)
+    check(any("/add/McDuff/77/0/GB" in u for u in calls), f"online: 'mcDuff' is sent as 'McDuff' ({calls[:1]})")
     check(scores.SAVE_DIR.endswith(".haunted_mansion"), "local scores live in ~/.haunted_mansion/")
 
     pygame.quit()
