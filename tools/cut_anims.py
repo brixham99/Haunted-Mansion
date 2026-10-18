@@ -10,7 +10,7 @@ Sheets (tools/art/sheets/, white background, four frames left to right):
 Background and soft edges use the same cutter as cut_sheets.py (border
 flood fill, enclosed flat-white pockets such as the gaps between the bat's
 wing fingers and between the skeleton's bones/legs/coat tatters count as
-background, soft alpha with the white unmixed), then defringe(): the rim
+background, soft alpha with the white unmixed), then cut_sheets.defringe(): the rim
 takes the colour of the paint just inside it, so JPEG ringing leaves no
 pale dotted outline on the dark floors, and one-pixel specks are dropped.
 
@@ -24,7 +24,7 @@ Writes assets/art/<set>_<n>.png (n = 1..4) and assets/art/anims.json with
 the canvas size each set is drawn at in the game, chosen so that the sprite
 matches the old single image: the bat's outstretched frame as wide as the
 old bat (108 px), the skeleton's legs-together frame as tall as the old
-skeleton (165 px).
+skeleton (165 px), now 20% taller (SKELETON_H 198 px).
 """
 import json
 import os
@@ -38,10 +38,13 @@ sys.path.insert(0, HERE)
 import cut_sheets as CS  # noqa: E402
 
 OUT = CS.OUT
+# The skeleton is drawn 20% taller than the old single sprite (165 px), so it
+# stands clearly over Archie and Holly (159 px); game.SKEL_FRAME_D scales too.
+SKELETON_H = 198
 SETS = {
     # name: (sheet, reference frame index, ("w" | "h", in-game px of the reference frame))
     "bat": ("bat_flap.jpg", 1, ("w", 108)),
-    "skeleton_walk": ("skeleton_walk.jpg", 1, ("h", 165)),
+    "skeleton_walk": ("skeleton_walk.jpg", 1, ("h", SKELETON_H)),
 }
 HOLE_FLAT = 0.2            # the gaps between bones, coat and arm, wing fingers: small pockets of noisy JPEG white
 PAD = 6
@@ -54,44 +57,9 @@ def cut_frames(sheet):
     names = [f"f{i}" for i in range(4)]
     frames = []
     for _name, box, mask in CS.find_items(fg, [names]):
-        img = defringe(CS.cut_item(rgb, d, mask, box))
+        img = CS.defringe(CS.cut_item(rgb, d, mask, box))
         frames.append(CS.harmonise(img))
     return frames
-
-
-def box_sum(x, r):
-    c = np.pad(x, ((r + 1, r), (r + 1, r)) + ((0, 0),) * (x.ndim - 2)).cumsum(0).cumsum(1)
-    k = 2 * r + 1
-    return c[k:, k:] - c[:-k, k:] - c[k:, :-k] + c[:-k, :-k]
-
-
-def defringe(img, r=2):
-    """Clean the cut edge. JPEG ringing leaves the outermost pixels lighter
-    than the paint just inside, which shows as a pale dotted outline on the
-    dark floors. Every pixel on the rim (within a pixel of transparency)
-    that is lighter than the solid paint behind it takes that paint's
-    colour, and the faint fringe is thinned a little."""
-    a = np.asarray(img).astype(np.float64)
-    rgb, al = a[..., :3], a[..., 3] / 255.0
-    clear = (al < 0.5).astype(np.float64)
-    rim = (al > 0) & (box_sum(clear, 1) > 0)
-    inner = ((al >= 0.9) & ~rim).astype(np.float64)
-    ws = box_sum(inner, r)
-    cs = box_sum(rgb * inner[..., None], r)
-    fix = rim & (ws > 0)
-    paint = cs[fix] / ws[fix][:, None]
-    lum = lambda c: c @ np.array([0.3, 0.59, 0.11])
-    lighter = lum(rgb[fix]) > lum(paint)
-    sub = rgb[fix]
-    sub[lighter] = paint[lighter]
-    rgb[fix] = sub
-    soft = (al > 0) & (al < 0.9)
-    al[soft] = al[soft] ** 1.35
-    al[soft & (ws == 0)] *= 0.5                      # lone faint pixels
-    specks = (al > 0) & (box_sum((al > 0.3).astype(np.float64), 1) <= 3)
-    al[specks] = 0.0                                 # one-pixel JPEG specks off the edge
-    out = np.concatenate([rgb, al[..., None] * 255.0], axis=2)
-    return Image.fromarray(np.clip(out + 0.5, 0, 255).astype(np.uint8), "RGBA")
 
 
 def eye_centre(img):

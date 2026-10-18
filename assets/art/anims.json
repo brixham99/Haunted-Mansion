@@ -14,13 +14,13 @@
  "skeleton_walk": {
   "frames": 4,
   "size": [
-   107,
-   168
+   128,
+   202
   ],
   "sheet": "skeleton_walk.jpg",
   "anchor": [
-   61.4,
-   166.6
+   73.7,
+   199.9
   ]
  }
 }

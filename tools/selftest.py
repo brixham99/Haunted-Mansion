@@ -395,6 +395,12 @@ def walk_checks(g):
           f"turns {G.TURN_S}s each")
 
 
+def _figure_h(img):
+    a = pygame.surfarray.array_alpha(img)
+    rows = (a > 40).any(axis=0).nonzero()[0]
+    return int(rows.max() - rows.min() + 1)
+
+
 def anim_checks(g):
     """The bat's wing beat and the skeleton's distance-driven walk."""
     g.new_game(1)
@@ -407,8 +413,11 @@ def anim_checks(g):
     img, ax, ay = g.art.enemy_frame("skeleton", 1, False)
     img2, ax2, _ = g.art.enemy_frame("skeleton", 1, True)
     check(abs((ax + ax2) - img.get_width()) < 1e-6, "mirrored for screen left about the same anchor")
-    check(abs(img.get_height() - 168) <= 4 and abs(g.art.enemy_frame("bat", 1, False)[0].get_width() - 111) <= 4,
-          "frames at the in-game sizes of the old sprites")
+    check(abs(img.get_height() - 202) <= 4 and abs(g.art.enemy_frame("bat", 1, False)[0].get_width() - 111) <= 4,
+          f"frames at their in-game sizes (skeleton {img.get_height()} px tall, 20% over the old sprite)")
+    archie = g.chars["archie"]["stand"]["se"]
+    check(_figure_h(img) > _figure_h(archie) * 1.15, f"the skeleton stands well over Archie ({_figure_h(img)} / {_figure_h(archie)} px)")
+    check(_figure_h(img) <= G.WALL_H - 20, "and still well under the walls")
     g.enemies = [G.Enemy("bat", 3.0, 3.0, g.rng), G.Enemy("skeleton", 2.0, 2.0, g.rng)]
     bat, sk = g.enemies
     bat.phase, frames = 0.0, []

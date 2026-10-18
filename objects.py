@@ -124,7 +124,7 @@ _t("ghost", "enemy", (1, 1), 150, "Floating Victorian ghost in a tattered white 
 _t("goblin", "enemy", (1, 1), 105, "Small green goblin with pointy ears, ragged brown tunic, toothy grin, holding a candle stub.")
 _t("bat", "enemy", (1, 1), 60, "Black bat, wings spread, red eyes (flies at head height).")
 _t("spider", "enemy", (1, 1), 70, "Big hairy black spider with red markings, eight legs, glinting eyes.")
-_t("skeleton", "enemy", (1, 1), 165, "Rattling skeleton in a tattered top hat, bony arms reaching forward.")
+_t("skeleton", "enemy", (1, 1), 198, "Rattling skeleton in a tattered top hat, bony arms reaching forward.")
 _t("monster", "enemy", (1, 1), 190, "Hulking Frankenstein-style monster, green-grey skin, neck bolts, stitched face, too-small black suit.")
 
 ENEMY_STATS = {

@@ -49,7 +49,8 @@ ENEMY_BOB_RATE = 8.0 * ENEMY_SPEED_SCALE ** 0.5   # walkers' step bob follows th
 BAT_FPS = 9.0                  # wing beat: up, outstretched, down, folded, looped
 BAT_BOB = 3.0                  # px; the body rises on the downstroke, in step with the frames
 BAT_FLAP_NEAR = 3.5            # tiles: the leathery flap is only heard this close
-SKEL_FRAME_D = 0.3             # tiles walked per frame (stride, together, other stride, jolt): no foot slide
+SKEL_FRAME_D = 0.36            # tiles walked per frame (stride, together, other stride, jolt): no foot slide
+                               # (0.3 at the old size; the stride grew with the 20% bigger skeleton)
 SKEL_IDLE_S = 0.3              # standing this long -> the legs-together frame
 SKEL_JOLT_S = 0.1              # the 1-2 px drop on each footfall
 SKEL_CLACK_FAR = 9.0           # tiles: the footfall clack fades out by this distance

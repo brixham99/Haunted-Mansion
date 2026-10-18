@@ -8,8 +8,10 @@ placeholders.
 - Background: near-white pixels flood-filled from the border (not a global
   white key), so white and pale things keep their whites: the ghost, lace,
   marble, the cot, the cream linen press, the tablecloth. Enclosed pockets
-  count as background only when they are small-ish flat pure white (gaps
-  between cot bars, holes in the cobweb, under a table).
+  count as background when they look like the sheet's white seen through a
+  gap (flat or neutral: HOLE_FLAT, HOLE_SAT) and are not a painted highlight
+  (is_highlight): between bedposts and canopy drapes, cot bars, banister
+  rails, under tables and chairs. tools/alpha_audit.py checks the results.
 - Items: connected blobs on the white, grouped into the sheet's items, read
   in rows top to bottom and left to right (SHEETS.md gives the order). A
   None in LAYOUT is an old version that a later sheet replaces: it is still
@@ -21,7 +23,11 @@ placeholders.
   organic_iso.jpg (armchair, chair, harp, rocking horse); the boiler and pumpkin by furn9_iso.jpg
   and pumpkin_iso.jpg (the pumpkin on the left of furn9_iso is not used).
 - Edges: soft alpha from the distance to white, with the white unmixed from
-  the edge colour (no white halo); specks are dropped.
+  the edge colour; then defringe(): rim pixels lighter than the paint just
+  inside them (JPEG ringing, a pale dotted outline on dark floors) take that
+  paint's colour; specks are dropped.
+- The cobweb is keyed instead (key_cobweb): pale semi-transparent strands,
+  transparent holes, the spider opaque.
 - Facing: the manifest wants furniture fronts towards the viewer's lower
   right; items painted the other way are mirrored (MIRROR below). Wall items
   are flat front views and are left as they are.
@@ -88,10 +94,21 @@ MIRROR = {"wine_rack", "trunk", "suit_of_armour", "bed",
           "coffin", "tomb", "cot"}
 
 BG_T = 20                  # "white": max channel distance from 255
-HOLE_MAX, HOLE_FLAT = 40000, 0.6
-# Sheets whose white has more JPEG noise: the gaps between the boiler's pipes
-# and gauges (furn9_iso) are only ~53% within 5 of pure white.
-HOLE_FLAT_SHEET = {"furn9_iso.jpg": 0.45, "organic_iso.jpg": 0.4, "chairs_back_iso.jpg": 0.4}
+# An enclosed near-white pocket is the sheet's white seen through a gap when
+# at least HOLE_FLAT of it is within 5 of pure white. The JPEG noise in small
+# pockets (between bedposts and canopy drapes, the cot's bars, banister
+# rails, cobweb holes, under tables) leaves only 17-60% of them that flat;
+# painted whites (the ghost, the paintings' faces and moons, marble, lace,
+# porcelain, steam) are shaded and are at most ~12% (alpha_audit.py lists
+# both for each piece). Was 0.6, which left many gaps white.
+HOLE_MAX, HOLE_FLAT = 40000, 0.15
+HOLE_FLAT_SHEET = {}
+# ... or when it is neutral: the sheet's white (and its JPEG grey) has a mean
+# channel spread of 1-2.5 even where it is noisy; painted whites are tinted
+# (the ghost, cot, lace, marble, porcelain: 6-15).
+HOLE_SAT = 4.0
+# ... unless it is a painted highlight (is_highlight)
+HIGHLIGHT_SAT, HIGHLIGHT_RING_SAT, HIGHLIGHT_RING_LUM = 6.0, 45, 200
 SPECK = 40
 SOFT_LO, SOFT_HI = 8, 70
 HARMONISE = dict(saturation=1.06, contrast=1.04, brightness=1.06)
@@ -106,13 +123,37 @@ def background(rgb, flat=HOLE_FLAT):
     bg = arr[1:-1, 1:-1] == 128
     # enclosed white pockets: background if flat pure white (seen through a gap)
     rest = (arr[1:-1, 1:-1] == 255)
+    sat = rgb.max(axis=2) - rgb.min(axis=2)
     lab = label(rest)
-    for i in range(1, lab.max() + 1):
-        comp = lab == i
-        n = comp.sum()
-        if 12 <= n <= HOLE_MAX and (d[comp] < 5).mean() >= flat:
-            bg |= comp
+    sizes = np.bincount(lab.ravel())
+    for i in range(1, len(sizes)):
+        if not 12 <= sizes[i] <= HOLE_MAX:
+            continue
+        ys, xs = np.nonzero(lab == i)
+        y0, y1, x0, x1 = max(0, ys.min() - 8), ys.max() + 9, max(0, xs.min() - 8), xs.max() + 9
+        comp = lab[y0:y1, x0:x1] == i
+        dc, sc = d[y0:y1, x0:x1][comp], sat[y0:y1, x0:x1][comp]
+        if not ((dc < 5).mean() >= flat or (sc.mean() < HOLE_SAT and dc.mean() < 12)):
+            continue
+        if is_highlight(rgb[y0:y1, x0:x1], comp, sc):
+            continue
+        bg[y0:y1, x0:x1] |= comp
     return bg, d
+
+
+def is_highlight(rgb, comp, sat):
+    """A white pocket that is painted light, not a gap: tinted itself, or
+    ringed by coloured glow (the key's eyes, the crystal ball) or by pale
+    paint all round (the shine on the porcelain jug). Gaps are ringed by the
+    piece's darker outline (or the cot's grey shading)."""
+    if sat.mean() > HIGHLIGHT_SAT:
+        return True
+    im = Image.fromarray((comp * 255).astype(np.uint8))
+    ring = (np.asarray(im.filter(ImageFilter.MaxFilter(13))) > 0) & ~(np.asarray(im.filter(ImageFilter.MaxFilter(5))) > 0)
+    if not ring.any():
+        return False
+    r = rgb[ring]
+    return np.median(r.max(axis=1) - r.min(axis=1)) > HIGHLIGHT_RING_SAT or np.median(r @ np.array([0.3, 0.59, 0.11])) > HIGHLIGHT_RING_LUM
 
 
 def label(mask):
@@ -227,12 +268,48 @@ def cut_item(rgb, d, fg, box):
     return img.crop(img.split()[3].getbbox())
 
 
+def box_sum(x, r):
+    c = np.pad(x, ((r + 1, r), (r + 1, r)) + ((0, 0),) * (x.ndim - 2)).cumsum(0).cumsum(1)
+    k = 2 * r + 1
+    return c[k:, k:] - c[:-k, k:] - c[k:, :-k] + c[:-k, :-k]
+
+
+def defringe(img, r=2):
+    """Clean the cut edge. JPEG ringing leaves the outermost pixels lighter
+    than the paint just inside, which shows as a pale dotted outline on the
+    dark floors. Every pixel on the rim (within a pixel of transparency)
+    that is lighter than the solid paint behind it takes that paint's
+    colour, and the faint fringe is thinned a little."""
+    a = np.asarray(img).astype(np.float64)
+    rgb, al = a[..., :3], a[..., 3] / 255.0
+    clear = (al < 0.5).astype(np.float64)
+    rim = (al > 0) & (box_sum(clear, 1) > 0)
+    inner = ((al >= 0.9) & ~rim).astype(np.float64)
+    ws = box_sum(inner, r)
+    cs = box_sum(rgb * inner[..., None], r)
+    fix = rim & (ws > 0)
+    paint = cs[fix] / ws[fix][:, None]
+    lum = lambda c: c @ np.array([0.3, 0.59, 0.11])
+    lighter = lum(rgb[fix]) > lum(paint)
+    sub = rgb[fix]
+    sub[lighter] = paint[lighter]
+    rgb[fix] = sub
+    soft = (al > 0) & (al < 0.9)
+    al[soft] = al[soft] ** 1.35
+    al[soft & (ws == 0)] *= 0.5                      # lone faint pixels
+    specks = (al > 0) & (box_sum((al > 0.3).astype(np.float64), 1) <= 3)
+    al[specks] = 0.0                                 # one-pixel JPEG specks off the edge
+    out = np.concatenate([rgb, al[..., None] * 255.0], axis=2)
+    return Image.fromarray(np.clip(out + 0.5, 0, 255).astype(np.uint8), "RGBA")
+
+
 # Pieces painted standing on a pale grey drop shadow: the shadow is light
 # grey on the white sheet, which would show as a pale patch on a dark floor.
 # Only furniture (the ghost is pale grey all over), and only the lower band.
 NO_SHADOW_FIX = {"ghost", "goblin", "bat", "spider", "skeleton", "monster", "key", "rug", "rug_lifted",
                  "painting", "painting_lady", "painting_landscape", "mirror", "window", "cobweb",
-                 "front_door", "door_frame", "stairs_up", "stairs_down", "ladder_up", "trapdoor"}
+                 "front_door", "door_frame", "stairs_up", "stairs_down", "trapdoor"}
+# (the ladder's foot stands on a pale painted shadow, which is fixed like the furniture's)
 SHADOW_BAND = 0.35
 # Pale shadow seen through gaps (under a barrel stand, between iron legs) is
 # enclosed, so it is not reached from the outside; enclosed pale-grey pockets
@@ -272,18 +349,67 @@ def fix_ground_shadow(img, pockets=True):
 # White seen between closely spaced bars (harp strings, a pierced chair
 # back) is split into pockets too small to count as holes: key out pale,
 # neutral pixels on these pieces (none of them has white of its own).
-KEY_WHITE = {"harp": 228, "chair": 228, "chair_ne": 228}
+KEY_WHITE = {"harp": 228, "chair": 228, "chair_ne": 228,
+             "wine_rack": 232}       # the sheet's white between the painted cobweb strands at the back
+KEEP_SHINE = {"wine_rack"}            # ... but not the glints on the bottles
 
 
-def key_white(img, thr):
+def key_white(img, thr, keep_shine=False):
     a = np.asarray(img).astype(np.float64)
     rgb = a[..., :3]
     lo = rgb.min(axis=2)
     sat = rgb.max(axis=2) - lo
     k = np.clip((250.0 - lo) / (250.0 - thr), 0.0, 1.0)      # 1 below thr, 0 at pure white
     k = np.where(sat < 24, k, 1.0)
+    if keep_shine:      # white glints ringed by dark paint (the bottles) are shine, not sheet
+        lum = rgb @ np.array([0.3, 0.59, 0.11])
+        lab = label(k < 1.0)
+        for i in range(1, lab.max() + 1):
+            ys, xs = np.nonzero(lab == i)
+            if len(ys) > 400:
+                continue
+            y0, y1, x0, x1 = max(0, ys.min() - 4), ys.max() + 5, max(0, xs.min() - 4), xs.max() + 5
+            comp = lab[y0:y1, x0:x1] == i
+            ring = (np.asarray(Image.fromarray((comp * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(7))) > 0) & ~comp
+            if ring.any() and np.median(lum[y0:y1, x0:x1][ring]) < 110:
+                k[ys, xs] = 1.0
     a[..., 3] *= k
     return Image.fromarray((a + 0.5).astype(np.uint8), "RGBA")
+
+
+WEB_COLOUR = (218, 218, 224)
+
+
+def key_cobweb(rgb, box):
+    """The cobweb is grey strands drawn on the white sheet: keyed into an
+    alpha web rather than cut (its holes are the background). Alpha from how
+    dark each pixel is; the strands become pale, slightly see-through silk
+    (dark strands would vanish on the dark walls); the little spider (the
+    big dark blob, with its legs) keeps its own colour and is opaque."""
+    x0, y0, x1, y1 = box
+    sub = rgb[y0:y1, x0:x1]
+    lum = sub @ np.array([0.3, 0.59, 0.11])
+    dark = 255.0 - lum
+    blob = label(lum < 70)
+    sizes = np.bincount(blob.ravel())
+    spider = np.isin(blob, [i for i in range(1, len(sizes)) if sizes[i] >= 150])
+    spider = np.asarray(Image.fromarray((spider * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(5))) > 0
+    spider &= lum < 200
+    a_web = np.clip((dark - 14.0) / 110.0, 0.0, 1.0) * 0.85
+    a_spi = np.clip((dark - 14.0) / 60.0, 0.0, 1.0)
+    alpha = np.where(spider, a_spi, a_web)
+    # only the web itself (and its spider): stray marks on the sheet nearby go
+    parts = label(alpha > 0.3)
+    sizes = np.bincount(parts.ravel())
+    sizes[0] = 0
+    web = np.isin(parts, np.nonzero(sizes >= 0.05 * sizes.max())[0])
+    web = np.asarray(Image.fromarray((web * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(7))) > 0
+    alpha = np.where(web, alpha, 0.0)
+    col = np.where(spider[..., None], np.clip((sub - (1.0 - a_spi[..., None]) * 255.0) / np.maximum(a_spi[..., None], 0.05), 0, 255),
+                   np.array(WEB_COLOUR, np.float64))
+    out = np.concatenate([col, alpha[..., None] * 255.0], axis=2)
+    img = Image.fromarray((out + 0.5).astype(np.uint8), "RGBA")
+    return img.crop(img.split()[3].getbbox())
 
 
 def harmonise(img):
@@ -346,9 +472,9 @@ def main(argv):
         for name, box, mask in find_items(fg, rows):
             if name is None or (only is not None and name not in only):
                 continue
-            img = cut_item(rgb, d, mask, box)
+            img = key_cobweb(rgb, box) if name == "cobweb" else defringe(cut_item(rgb, d, mask, box))
             if name in KEY_WHITE:
-                img = key_white(img, KEY_WHITE[name])
+                img = key_white(img, KEY_WHITE[name], keep_shine=name in KEEP_SHINE)
             if name in MIRROR:
                 img = img.transpose(Image.FLIP_LEFT_RIGHT)
             if name not in NO_SHADOW_FIX:

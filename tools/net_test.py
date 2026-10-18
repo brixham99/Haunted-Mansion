@@ -196,14 +196,14 @@ def main():
     ce = [e for e in cli.enemies if e.kind == "skeleton"]
     clacks0 = sum(cli.sounds.requested.get(f"skel_clack{i}", 0) for i in (1, 2))
     seen = []
-    for _ in range(90):                       # 1.5 s at 0.6 tiles/s: 0.9 tiles
+    for _ in range(120):                      # 2 s at 0.6 tiles/s: 1.2 tiles
         sk.x += 0.6 * DT
         step(games)
         if ce:
             seen.append(ce[-1].frame)
     clacks = sum(cli.sounds.requested.get(f"skel_clack{i}", 0) for i in (1, 2)) - clacks0
     check(len(ce) == 1 and set(seen) == {0, 1, 2, 3}, f"the joiner's skeleton walks through all four frames ({sorted(set(seen))})")
-    check(1 <= clacks <= 3, f"and clacks on its footfalls ({clacks} for 0.9 tiles)")
+    check(1 <= clacks <= 3, f"and clacks on its footfalls ({clacks} for 1.2 tiles)")
     step(games, 60)                           # the joiner's easing settles, then it stands
     check(ce and ce[-1].frame == 1 and sk.frame == 1,
           f"standing still: the legs-together frame on both ({sk.frame} / {ce[-1].frame if ce else None})")
