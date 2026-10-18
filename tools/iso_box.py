@@ -609,10 +609,137 @@ def build_ladder_up():
     return sc
 
 
+def recolour(img, target, keep_brass=True):
+    """A painted face repainted in another colour: its own light and shade
+    (luminance, normalised) times target; brass handles keep their colour."""
+    a = np.asarray(img.convert("RGBA")).astype(np.float32)
+    rgb = a[..., :3]
+    lum = rgb @ np.array([0.3, 0.59, 0.11], np.float32)
+    m = a[..., 3] > 0
+    k = lum / max(1.0, float(np.median(lum[m])))
+    out = np.clip(k[..., None] * np.array(target, np.float32), 0, 255)
+    if keep_brass:
+        brass = (rgb[..., 0] - rgb[..., 2] > 38) & (rgb[..., 0] > 90)
+        out[brass] = rgb[brass]
+    a[..., :3] = out
+    return Image.fromarray(a.astype(np.uint8), "RGBA")
+
+
+def butcher_block(w, h, seed=3, end_grain=False):
+    """Scrubbed pine/beech butcher-block: glued strips of slightly different
+    tone with fine grain, pale scrubbed wear in the middle. w x h px, strips
+    across the width (or end-grain blocks for the front edge)."""
+    rng = np.random.default_rng(seed)
+    base = np.array([198, 166, 120], np.float32)
+    img = np.zeros((h, w, 3), np.float32)
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    if end_grain:
+        bw = max(6, w // 26)
+        for i in range(0, w, bw):
+            t = rng.uniform(0.82, 1.08)
+            img[:, i:i + bw] = base * t
+            img[:, i:i + 1] *= 0.72
+        img *= (0.92 + 0.08 * np.sin(yy * 1.7 + xx * 0.3))[..., None]
+    else:
+        sw = max(5, h // 9)
+        y = 0
+        while y < h:
+            t = rng.uniform(0.84, 1.08)
+            hh = int(sw * rng.uniform(0.8, 1.2))
+            img[y:y + hh] = base * t
+            img[y:y + 1] *= 0.74                      # glue line
+            y += hh
+        grain = 0.94 + 0.06 * np.sin(xx * 0.09 + 3 * np.sin(yy * 0.31) + rng.uniform(0, 6))
+        img *= grain[..., None]
+        wear = np.exp(-(((xx - w / 2) / (w * 0.35)) ** 2 + ((yy - h / 2) / (h * 0.4)) ** 2))
+        img = img * (1 + 0.1 * wear[..., None])        # scrubbed pale in the middle
+        img *= (1 - 0.05 * rng.random((h, w)))[..., None]
+    a = np.full((h, w, 1), 255, np.float32)
+    return Image.fromarray(np.concatenate([np.clip(img, 0, 255), a], 2).astype(np.uint8), "RGBA")
+
+
+def _pan(w=90, h=60):
+    """A copper saucepan from the side: body with a rolled rim, a long handle."""
+    S = 4
+    im = Image.new("RGBA", (w * S, h * S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    bx0, bx1, by0, by1 = 4 * S, 52 * S, 18 * S, 56 * S
+    d.rectangle([bx0, by0, bx1, by1], fill=(168, 88, 46, 255))
+    for i in range(bx1 - bx0):
+        t = i / (bx1 - bx0)
+        c = int(150 + 80 * math.sin(math.pi * (0.15 + 0.7 * t)) ** 3)
+        d.line([(bx0 + i, by0), (bx0 + i, by1)], fill=(c, int(c * 0.52), int(c * 0.28), 255))
+    d.ellipse([bx0, by1 - 6 * S, bx1, by1 + 2 * S], fill=(120, 60, 30, 255))
+    d.rectangle([bx0 - S, by0 - 3 * S, bx1 + S, by0 + 2 * S], fill=(214, 140, 84, 255))
+    d.polygon([(bx1, by0 + 6 * S), (w * S - 2 * S, by0 - 2 * S), (w * S - S, by0 + 2 * S), (bx1, by0 + 12 * S)],
+              fill=(70, 62, 58, 255))
+    return crop(im.resize((w, h), Image.LANCZOS))
+
+
+def _bowl(w=70, h=42):
+    S = 4
+    im = Image.new("RGBA", (w * S, h * S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    W, H = w * S, h * S
+    d.chord([0, -H * 0.9, W, H], 0, 180, fill=(222, 206, 172, 255))
+    for i in range(W):
+        t = i / W
+        c = 0.72 + 0.32 * math.sin(math.pi * t) ** 0.6
+        y0 = H * 0.05 + 0 * t
+        d.line([(i, y0 + 2), (i, H * 0.05 + (H * 0.95 - 2) * math.sqrt(max(0, 1 - (2 * t - 1) ** 2)))],
+               fill=(int(226 * c), int(208 * c), int(170 * c), 255))
+    d.rectangle([W * 0.06, H * 0.36, W * 0.94, H * 0.44], fill=(150, 170, 196, 255))      # a blue band
+    d.ellipse([W * 0.02, -H * 0.06, W * 0.98, H * 0.16], fill=(236, 226, 200, 255))
+    d.ellipse([W * 0.1, -H * 0.02, W * 0.9, H * 0.12], fill=(170, 130, 80, 255))           # batter
+    return crop(im.resize((w, h), Image.LANCZOS))
+
+
+def _loaf(w=64, h=34):
+    S = 4
+    im = Image.new("RGBA", (w * S, h * S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    W, H = w * S, h * S
+    d.rounded_rectangle([0, H * 0.15, W, H], radius=H * 0.45, fill=(176, 112, 56, 255))
+    d.rounded_rectangle([W * 0.05, H * 0.12, W * 0.95, H * 0.62], radius=H * 0.35, fill=(204, 146, 80, 255))
+    for k in range(4):
+        x = W * (0.22 + k * 0.18)
+        d.line([(x, H * 0.2), (x + W * 0.08, H * 0.55)], fill=(232, 196, 140, 255), width=S * 2)
+    return crop(im.resize((w, h), Image.LANCZOS))
+
+
+def build_kitchen_island():
+    """A Victorian kitchen island: the dresser's panelled cupboard base (two
+    drawers over two doors on a plinth, brass handles) repainted deep green,
+    freestanding in the middle of its 2 x 1 footprint, under a scrubbed
+    butcher-block top; a copper pan, a mixing bowl and a loaf on a board."""
+    F = faces()
+    sc = Scene("kitchen_island")
+    green = (66, 96, 72)
+    base = recolour(F["dr_base"], green)
+    side = recolour(F["dr_side"], green)
+    hb = 1.8 * TE * base.height / base.width            # ~71 px
+    x0, depth = 0.17, 0.66
+    part(sc, base, 1.9, 1.8, 0, hb, x0=x0, side=side, depth=depth, grain=side, max_depth=depth)
+    # the butcher-block top, overhanging the base a little all round
+    tx0, tx1, ty0, ty1, z0, z1 = 0.1, 0.9, 0.04, 1.96, hb, hb + 8
+    L, D = (ty1 - ty0) * TE * 2, (tx1 - tx0) * TE * 2
+    sc.box(tx0, ty0, z0, tx1, ty1, z1, front=butcher_block(int(L), 16, end_grain=True),
+           side=butcher_block(int(D), 16, seed=5, end_grain=True), top=butcher_block(int(L), int(D)))
+    # things on top: a bread board with a loaf, a mixing bowl, a copper pan
+    board = butcher_block(90, 60, seed=9)
+    board = recolour(board, (150, 110, 70), keep_brass=False)
+    sc.quad(board, (0.32, 0.95, z1 + 1.5), (0.32, 0.5, z1 + 1.5), (0.68, 0.95, z1 + 1.5), 1.0)
+    sc.decal(_loaf(), 0.52, 0.72, z1 + 2, 15)
+    sc.decal(_bowl(), 0.45, 1.35, z1, 18)
+    sc.decal(_pan(), 0.55, 1.72, z1, 17)
+    return sc
+
+
 BUILDS = {"fireplace": build_fireplace, "kitchen_dresser": build_kitchen_dresser,
           "chest_of_drawers": build_chest_of_drawers, "bookcase": build_bookcase, "wardrobe": build_wardrobe,
           "piano": build_piano, "grandfather_clock": build_grandfather_clock, "linen_press": build_linen_press,
-          "desk": build_desk, "toy_box": build_toy_box, "ladder_up": build_ladder_up}
+          "desk": build_desk, "toy_box": build_toy_box, "ladder_up": build_ladder_up,
+          "kitchen_island": build_kitchen_island}
 
 
 def main(argv):

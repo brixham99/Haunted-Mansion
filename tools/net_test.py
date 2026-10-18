@@ -208,6 +208,23 @@ def main():
     check(ce and ce[-1].frame == 1 and sk.frame == 1,
           f"standing still: the legs-together frame on both ({sk.frame} / {ce[-1].frame if ce else None})")
     host.enemies.remove(sk)
+    # a vampire hovering in the hall: the joiner gets his kind and loops his frames (no shadow either side)
+    vp = G.Enemy("vampire", 3.5, 3.5, host.rng)
+    host.enemies.append(vp)
+    step(games, 5)
+    cv = [e for e in cli.enemies if e.kind == "vampire"]
+    vseen = []
+    for _ in range(60):
+        step(games)
+        if cv:
+            vseen.append(cv[-1].frame)
+    check(len(cv) == 1 and cv[-1].floats, "the joiner sees the vampire, floating")
+    check(set(vseen) == {0, 1, 2, 3} and 5 <= sum(1 for a, b in zip(vseen, vseen[1:]) if a != b) <= 7,
+          f"and loops his four frames at ~6 fps ({sorted(set(vseen))})")
+    check(cv and abs(cv[-1].x - vp.x) < 0.2 and abs(cv[-1].y - vp.y) < 0.2 and cv[-1].left == vp.left,
+          "where the host has him, facing the same way")
+    check("vampire" in G.NO_SHADOW, "and neither game draws him a shadow")
+    host.enemies.remove(vp)
     host.grace = grace
     step(games, 5)
     if args.shots:

@@ -120,12 +120,17 @@ class Coop:
         return p.seen and p.room == self.g.room.id and not p.fade and self.partner_out() is None
 
     def room_objs(self, r):
-        return {o.id: o for o in r.objs}
+        return {o.id: o for o in r.objs + r.walls}      # (wall hangings can be searched too)
 
     def near(self, r, obj, reach=1.6):
         p = self.partner
-        cx, cy = obj.x + obj.gx / 2.0, obj.y + obj.gy / 2.0
-        return p.room == r.id and abs(p.tx - cx) <= obj.gx / 2.0 + reach and abs(p.ty - cy) <= obj.gy / 2.0 + reach
+        if obj.side == "N":       # a wall hanging: along the wall line, at its index
+            cx, cy, hx, hy = obj.index + obj.gx / 2.0, 0.0, obj.gx / 2.0, 0.0
+        elif obj.side == "W":
+            cx, cy, hx, hy = 0.0, obj.index + obj.gy / 2.0, 0.0, obj.gy / 2.0
+        else:
+            cx, cy, hx, hy = obj.x + obj.gx / 2.0, obj.y + obj.gy / 2.0, obj.gx / 2.0, obj.gy / 2.0
+        return p.room == r.id and abs(p.tx - cx) <= hx + reach and abs(p.ty - cy) <= hy + reach
 
     # ------------------------------------------------------------- per frame
     def tick(self, dt):
@@ -228,8 +233,9 @@ class Coop:
             e.tx, e.ty, e.left = x, y, left
             if abs(e.x - x) + abs(e.y - y) > 2.0:
                 e.x, e.y = x, y
-            if chasing and not e.chasing:
+            if chasing and not e.chasing and g.time - e.cry_t >= 4.0:   # (as the host: not more than every 4 s)
                 g.sounds.play(e.kind, 0.8)
+                e.cry_t = g.time
             e.chasing = chasing
         objs = self.room_objs(g.room)
         for oid, x, y, lifted in obs:

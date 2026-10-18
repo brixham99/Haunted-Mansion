@@ -518,7 +518,7 @@ def shadow_checks(g):
     are soft, the loft ladder reaches the ceiling, and no window shows the moon."""
     import numpy as np
     for name in ("piano", "fireplace", "wardrobe", "bookcase", "kitchen_dresser", "grandfather_clock",
-                 "range_cooker", "boiler", "chest_of_drawers", "desk"):
+                 "range_cooker", "boiler", "chest_of_drawers", "desk", "kitchen_island"):
         check(name not in G.CONTACT_SHADOW, f"{name}: no floor shadow")
     check(all(n in T for n in G.CONTACT_SHADOW), "contact shadows only name real pieces")
     baked = []
@@ -544,6 +544,116 @@ def shadow_checks(g):
     check(lad.get_height() >= 1.0 * WALL_H, f"the loft ladder reaches the ceiling ({lad.get_height()} px)")
     win = pygame.surfarray.pixels3d(pygame.image.load(os.path.join(art.ART_DIR, "window.png"))).astype(int)
     check(int((win.mean(2) > 200).sum()) < 40, f"no moon in the window ({int((win.mean(2) > 200).sum())} bright px)")
+
+
+def kitchen_checks(house):
+    """The kitchen: no table and chairs, an island in their place, the range
+    and dresser apart, and the doorways, stairs and sink all reachable."""
+    k = house.rooms["kitchen"]
+    types = [o.type for o in k.objs]
+    check("kitchen_table" not in types and "chair" not in types, f"no table or chairs in the kitchen {types}")
+    isl = [o for o in k.objs if o.type == "kitchen_island"]
+    check(len(isl) == 1 and isl[0].gx * isl[0].gy >= 2, "a kitchen island (2 tiles) in their place")
+    check(T["kitchen_island"]["solid"] and "kitchen_island" in art.ISO_BOX_ART, "the island is solid iso-box art")
+    rng_ = next(o for o in k.objs if o.type == "range_cooker")
+    dres = next(o for o in k.objs if o.type == "kitchen_dresser")
+    gap = min(abs(a[0] - b[0]) + abs(a[1] - b[1]) for a in rng_.cells() for b in dres.cells())
+    check(gap >= 3, f"the range and the dresser are well apart ({gap} tiles)")
+    doors = [c for side in "NSEW" for c in k.door_cells(side)]
+    reach = k.flood(doors[0])
+    check(all(c in reach for c in doors), "every kitchen doorway reaches every other")
+    near = lambda o: any((c[0] + dx, c[1] + dy) in reach for c in o.cells()
+                         for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+    for t in ("sink", "stairs_down", "kitchen_island", "range_cooker", "kitchen_dresser"):
+        o = next(o for o in k.objs if o.type == t)
+        check(near(o), f"kitchen: the {t} can be reached")
+    opens = [p for p in house.open_places() if p[0] == "kitchen"]
+    check(len(opens) >= 10, f"the key can still turn up in the kitchen ({len(opens)} tiles)")
+    print(f"kitchen: island at {isl[0].cells()}, range-dresser gap {gap}, {len(opens)} open key tiles")
+
+
+def vampire_checks(g):
+    """The Crypt's vampire: a floater, animated, hovering, and no shadow at all."""
+    import numpy as np
+    check("vampire" in g.house.rooms["crypt"].enemies, "a vampire haunts the Crypt")
+    e = G.Enemy("vampire", 3.0, 3.0, g.rng)
+    check(e.floats and e.z0 >= 30, f"the vampire floats, well clear of the floor (z {e.z0})")
+    for left in (False, True):
+        fr = [g.art.enemy_frame("vampire", i, left) for i in range(4)]
+        check(all(f is not None for f in fr) and len({f[0].get_size() for f in fr}) == 1,
+              f"vampire: 4 frames ({'left' if left else 'right'})")
+    img = g.art.enemy_frame("vampire", 0, False)[0]
+    skel = g.art.enemy_frame("skeleton", 1, False)[0]
+    check(abs(_figure_h(img) - _figure_h(skel)) <= 0.15 * _figure_h(skel),
+          f"about the skeleton's height ({_figure_h(img)} / {_figure_h(skel)} px)")
+    e.phase, frames = 0.0, []
+    g.enemies = [e]
+    for _ in range(60):                       # one second
+        e.phase += DT
+        g.animate_enemies(DT)
+        frames.append(e.frame)
+    flips = sum(1 for a, b in zip(frames, frames[1:]) if a != b)
+    check(5 <= flips <= 7 and set(frames) == {0, 1, 2, 3}, f"the vampire loops its 4 frames at ~6 fps ({flips}/s)")
+    # no shadow: draw_enemy_shadow is never called for him, and the floor under him is untouched
+    g.new_game(1)
+    g.mode = "play"
+    g.enter_room("crypt", None)
+    calls = []
+    orig = g.draw_enemy_shadow
+    g.draw_enemy_shadow = lambda *a, **k: (calls.append(a[0].kind), orig(*a, **k))
+    g.enemies, g.px, g.py = [], 6.5, 1.5
+    g.draw()
+    bare = pygame.surfarray.array3d(g.screen).astype(int)
+    v = G.Enemy("vampire", 4.5, 5.5, g.rng)
+    g.enemies = [v]
+    zs = []
+    for i in range(40):
+        v.phase = i * 0.1
+        z = v.z0 + G.VAMP_BOB * math.sin(v.phase * G.VAMP_BOB_RATE)
+        zs.append(z)
+        g.draw()
+    check(not calls, f"no shadow is ever drawn for the vampire ({calls})")
+    check(min(zs) > 25 and max(zs) - min(zs) > 6, f"he bobs slowly, always clear of the floor (z {min(zs):.0f}-{max(zs):.0f})")
+    v.phase = 0.0
+    g.draw()
+    now = pygame.surfarray.array3d(g.screen).astype(int)
+    fx, fy = g.P(v.x, v.y, 0)
+    fx, fy = int(fx), int(fy)
+    win = (slice(fx - 30, fx + 30), slice(fy - 8, fy + 8))
+    diff = int((np.abs(now[win] - bare[win]).sum(2) > 6).sum())
+    check(diff == 0, f"the floor beneath him is untouched: no shadow, no contact ellipse ({diff} px changed)")
+    del g.draw_enemy_shadow
+    for k in ("bat", "skeleton"):
+        check(k not in G.NO_SHADOW, f"{k}s keep their soft shadows")
+    check("vampire" in G.SOUND_VOL and G.SOUND_VOL["vampire"] <= 0.4, "a quiet hiss for him")
+    # behaviour: drifts slowly, glides at you when close, hisses once, and hurts
+    g.grace, g.invuln, god = 0.0, 0.0, g.god
+    v = G.Enemy("vampire", 2.0, 2.0, g.rng)
+    g.enemies, g.px, g.py = [v], 6.5, 6.5
+    x0, y0 = v.x, v.y
+    hiss0 = g.sounds.requested.get("vampire", 0)
+    for _ in range(60):
+        g.update(DT)
+    drift = math.hypot(v.x - x0, v.y - y0)
+    check(not v.chasing and drift <= v.speed * 0.5 + 1e-6, f"far off he drifts slowly ({drift:.2f} tiles/s)")
+    check(g.sounds.requested.get("vampire", 0) == hiss0, "silently")
+    g.px, g.py = v.x + 2.5, v.y
+    d0 = 2.5
+    for _ in range(30):
+        g.update(DT)
+    d1 = math.hypot(g.px - v.x, g.py - v.y)
+    check(v.chasing and d0 - d1 > 0.5 * v.speed * 0.5 * 0.9, f"close by he glides at you ({d0:.2f} -> {d1:.2f})")
+    check(abs(v.speed - 1.15 * G.ENEMY_SPEED_SCALE) < 1e-9, f"at the global speed scale ({v.speed:.2f} tiles/s)")
+    for _ in range(120):
+        g.update(DT)
+    check(g.sounds.requested.get("vampire", 0) - hiss0 == 1, "one quiet hiss as he starts the chase, not a stream")
+    g.god, lives = False, g.lives
+    g.px, g.py, v.x, v.y, g.invuln = v.x + 0.3, v.y, v.x, v.y, 0.0
+    for _ in range(10):
+        g.update(DT)
+    check(g.lives == lives - 1, f"his touch hurts ({lives} -> {g.lives})")
+    g.god = god
+    print(f"vampire: {flips} frames/s, hover z {min(zs):.0f}-{max(zs):.0f}, floor diff {diff}")
 
 
 def round_room_checks(g):
@@ -620,6 +730,8 @@ def main():
     exit_frame_checks(g)
     round_room_checks(g)
     shadow_checks(g)
+    kitchen_checks(g.house)
+    vampire_checks(g)
     # ---- full tour with enemies (invulnerable)
     if not args.quick:
         g.new_game(1)

@@ -22,5 +22,17 @@
    73.7,
    199.9
   ]
+ },
+ "vampire": {
+  "frames": 4,
+  "size": [
+   153,
+   201
+  ],
+  "sheet": "vampire.jpg",
+  "anchor": [
+   93.8,
+   198.1
+  ]
  }
 }

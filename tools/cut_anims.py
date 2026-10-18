@@ -6,6 +6,7 @@
 Sheets (tools/art/sheets/, white background, four frames left to right):
   bat_flap.jpg       wings up, wings outstretched, wings down, wings folded
   skeleton_walk.jpg  stride, legs together, other stride, jolt
+  vampire.jpg        hovering: cape flared, settled, flared, settled
 
 Background and soft edges use the same cutter as cut_sheets.py (border
 flood fill, enclosed flat-white pockets such as the gaps between the bat's
@@ -19,6 +20,9 @@ records the anchor point in in-game pixels):
   bat:      the body centre (the red eyes, a little lower) fixed in all frames
   skeleton: the boot soles on one ground line; the upper body (hat, skull,
             chest) centred horizontally
+  vampire:  the head and shoulders centred horizontally and the top of the
+            head on one line (the cape and the dangling feet move); the
+            anchor is under the body, where its feet hang (median height)
 
 Writes assets/art/<set>_<n>.png (n = 1..4) and assets/art/anims.json with
 the canvas size each set is drawn at in the game, chosen so that the sprite
@@ -31,7 +35,7 @@ import os
 import sys
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -41,10 +45,12 @@ OUT = CS.OUT
 # The skeleton is drawn 20% taller than the old single sprite (165 px), so it
 # stands clearly over Archie and Holly (159 px); game.SKEL_FRAME_D scales too.
 SKELETON_H = 198
+VAMPIRE_H = 196            # about the skeleton's height: he looms over Archie and Holly
 SETS = {
     # name: (sheet, reference frame index, ("w" | "h", in-game px of the reference frame))
     "bat": ("bat_flap.jpg", 1, ("w", 108)),
     "skeleton_walk": ("skeleton_walk.jpg", 1, ("h", SKELETON_H)),
+    "vampire": ("vampire.jpg", 1, ("h", VAMPIRE_H)),
 }
 HOLE_FLAT = 0.2            # the gaps between bones, coat and arm, wing fingers: small pockets of noisy JPEG white
 PAD = 6
@@ -60,6 +66,31 @@ def cut_frames(sheet):
         img = CS.defringe(CS.cut_item(rgb, d, mask, box))
         frames.append(CS.harmonise(img))
     return frames
+
+
+def clean_tips(img, below=0.45):
+    """The cape tatters' points and the boot tips end in a pale pixel or two
+    (the sheet's white caught in the JPEG): in the lower part of the frame,
+    pale grey pixels within 2 px of the outline take the colour of the dark
+    paint next to them (dropped if there is none). Shine inside the boots,
+    away from the edge, stays."""
+    a = np.asarray(img).astype(np.float64).copy()
+    h, w = a.shape[:2]
+    rgb, al = a[..., :3], a[..., 3]
+    L = rgb.mean(2)
+    sat = rgb.max(2) - rgb.min(2)
+    clear = np.asarray(Image.fromarray(((al < 40) * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(5))) > 0
+    pale = (al > 0) & (L > 100) & (sat < 60) & clear
+    pale[: int(h * below)] = False
+    ys, xs = np.nonzero(pale)
+    for y, x in zip(ys, xs):
+        y0, y1, x0, x1 = max(0, y - 3), min(h, y + 4), max(0, x - 3), min(w, x + 4)
+        nb = (al[y0:y1, x0:x1] > 200) & (L[y0:y1, x0:x1] < 90)
+        if nb.any():
+            rgb[y, x] = np.median(rgb[y0:y1, x0:x1][nb], axis=0)
+        else:
+            al[y, x] = 0
+    return Image.fromarray(np.clip(a + 0.5, 0, 255).astype(np.uint8), "RGBA")
 
 
 def eye_centre(img):
@@ -89,6 +120,17 @@ def align(name, frames):
         for f in frames:
             ex, ey = eye_centre(f)
             anchors.append((ex, ey + 18))          # the body centre, a little below the eyes
+    elif name == "vampire":
+        tops = []
+        for f in frames:
+            al = np.asarray(f)[..., 3] > 128
+            ys, xs = np.nonzero(al)
+            top, bot = ys.min(), ys.max()
+            head = al[top:top + int((bot - top) * 0.22)]       # head, collar and shoulders
+            hy, hx = np.nonzero(head)
+            tops.append((hx.mean(), top, bot - top))
+        body = float(np.median([t[2] for t in tops]))
+        anchors = [(x, top + body) for x, top, _ in tops]
     else:
         anchors = [upper_centre_and_feet(f) for f in frames]
     left = max(ax for ax, _ in anchors)
@@ -96,10 +138,10 @@ def align(name, frames):
     up = max(ay for _, ay in anchors)
     down = max(f.height - ay for f, (_, ay) in zip(frames, anchors))
     W, H = int(np.ceil(left + right)) + 2 * PAD, int(np.ceil(up + down)) + 2 * PAD
-    if name != "bat":
+    if name == "skeleton_walk":
         H = int(np.ceil(up)) + 2 * PAD          # feet (the anchor) on the bottom edge, less the pad
     out = []
-    anchor = (PAD + left, (PAD + up) if name == "bat" else H - PAD)
+    anchor = (PAD + left, H - PAD if name == "skeleton_walk" else PAD + up)
     for f, (ax, ay) in zip(frames, anchors):
         c = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         c.alpha_composite(f, (int(round(PAD + left - ax)), int(round(PAD + up - ay))))
@@ -111,7 +153,10 @@ def main(argv):
     strips = argv[argv.index("--strips") + 1] if "--strips" in argv else None
     meta = {}
     for name, (sheet, ref, (dim, px)) in SETS.items():
-        frames, anchor = align(name, cut_frames(sheet))
+        frames = cut_frames(sheet)
+        if name == "vampire":
+            frames = [clean_tips(f) for f in frames]
+        frames, anchor = align(name, frames)
         bb = frames[ref].split()[3].getbbox()
         ref_px = (bb[2] - bb[0]) if dim == "w" else (bb[3] - bb[1])
         k = px / ref_px
@@ -120,7 +165,8 @@ def main(argv):
         for i, f in enumerate(frames):
             f.save(os.path.join(OUT, f"{name}_{i + 1}.png"))
         meta[name] = {"frames": len(frames), "size": size, "sheet": sheet,
-                      # in-game px from the top-left: the bat's body centre, the skeleton's feet
+                      # in-game px from the top-left: the bat's body centre, the skeleton's feet,
+                      # the vampire's hanging feet
                       "anchor": [round(anchor[0] * k, 1), round(anchor[1] * k, 1)]}
         print(f"{name}: {len(frames)} frames, canvas {W}x{H} -> in game {size[0]}x{size[1]}")
         if strips:
@@ -130,7 +176,8 @@ def main(argv):
 
 
 LABELS = {"bat": ("1 wings up", "2 outstretched", "3 wings down", "4 folded"),
-          "skeleton_walk": ("1 stride", "2 legs together", "3 other stride", "4 jolt")}
+          "skeleton_walk": ("1 stride", "2 legs together", "3 other stride", "4 jolt"),
+          "vampire": ("1 cape flared", "2 settled", "3 flared", "4 settled")}
 
 
 def strip(name, frames, size, anchor, path):

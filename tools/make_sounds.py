@@ -278,6 +278,19 @@ def make_monster():
     return reverb(x * env(len(t), 0.15, 0.4), 1.0, 0.25)
 
 
+def make_vampire():
+    """A low, breathy hiss with a whispered rasp: noise through a slowly
+    closing band (a long 'hhhsss'), soft attack, a long tail."""
+    d = 1.4
+    t = t_(d)
+    n = rng.standard_normal(len(t))
+    hiss = bp_fast(n, 2600, 7200) * (0.55 + 0.45 * np.sin(2 * np.pi * 0.7 * t + 0.4))
+    breath = bp_fast(rng.standard_normal(len(t)), 300, 1400) * 0.5
+    rasp = bp_fast(n, 900, 2200) * (1 + np.sign(np.sin(2 * np.pi * 34 * t))) * 0.18
+    x = (hiss + breath + rasp) * env(len(t), 0.25, 0.7)
+    return reverb(x, 0.9, 0.3)
+
+
 def make_stairs():
     steps = []
     for k in range(5):
@@ -414,7 +427,7 @@ MAKERS = {
     "rug": (make_rug, 0.5), "hurt": (make_hurt_sting, 0.6),
     "door_creak": (make_door_creak, 0.85),
     "skel_clack1": (lambda: make_skel_clack(5, 1250), 0.7), "skel_clack2": (lambda: make_skel_clack(9, 1080), 0.7),
-    "bat_flap": (make_bat_flap, 0.6),
+    "bat_flap": (make_bat_flap, 0.6), "vampire": (make_vampire, 0.45),
 }
 
 

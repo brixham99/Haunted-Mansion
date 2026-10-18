@@ -68,6 +68,13 @@ ENEMY_BOB_RATE = 8.0 * ENEMY_SPEED_SCALE ** 0.5   # walkers' step bob follows th
 # every enemy sprite they are painted facing screen right and mirrored when
 # the enemy heads screen left (e.left); there are no separate up/down views.
 BAT_FPS = 9.0                  # wing beat: up, outstretched, down, folded, looped
+# The vampire: four hovering frames (cape flared, settled, ...) looped at
+# VAMP_FPS, the whole figure bobbing slowly VAMP_BOB px about its hover height
+# (ENEMY_STATS z). Vampires cast no shadow (NO_SHADOW).
+VAMP_FPS = 6.0
+VAMP_BOB = 6.0
+VAMP_BOB_RATE = 1.6            # rad/s: a slow rise and fall
+NO_SHADOW = {"vampire"}
 BAT_BOB = 3.0                  # px; the body rises on the downstroke, in step with the frames
 BAT_FLAP_NEAR = 3.5            # tiles: the leathery flap is only heard this close
 SKEL_FRAME_D = 0.36            # tiles walked per frame (stride, together, other stride, jolt): no foot slide
@@ -137,7 +144,7 @@ SOUND_VOL = {"door_creak": 0.85, "ambience": 0.35, "title_theme": 0.5, "creak1":
              "push": 0.5, "ghost": 0.45, "goblin": 0.5, "bat": 0.35, "spider": 0.4, "skeleton": 0.5,
              "monster": 0.6, "stairs": 0.5, "rug": 0.5, "hurt": 0.5, "step1": 0.25, "step2": 0.25,
              "step3": 0.25, "ow_archie": 0.5, "ow_holly": 0.5, "skel_clack1": 0.3, "skel_clack2": 0.3,
-             "bat_flap": 0.22}
+             "bat_flap": 0.22, "vampire": 0.3}
 
 
 def load_font(size, bold=False, serif=False):
@@ -228,6 +235,7 @@ class Enemy:
         self.chasing = False
         self.cried = False
         self.cry_cd = rng.uniform(1.0, 3.0)
+        self.cry_t = -99.0                # (two players: when the joiner last heard it cry)
         self.phase = rng.uniform(0, 6.28)
         self.wander = None
         self.rng = rng
@@ -1423,6 +1431,8 @@ class Game:
                 self._animate_bat(e, dt)
             elif e.kind == "skeleton":
                 self._animate_skeleton(e, dt)
+            elif e.kind == "vampire":
+                e.frame = int(e.phase * VAMP_FPS) % 4     # hovering: the cape flares and settles
 
     def _animate_bat(self, e, dt):
         f = int(e.phase * BAT_FPS) % 4
@@ -2248,7 +2258,8 @@ class Game:
             img = self.art.enemy(e.kind, e.left)
             z = e.z0 + (8 * math.sin(e.phase * 2) if e.floats else 0)
             bob = 0 if e.floats else abs(math.sin(e.phase * ENEMY_BOB_RATE)) * 3
-            self.draw_enemy_shadow(e, z if e.floats else 0, img.get_width())
+            if e.kind not in NO_SHADOW:
+                self.draw_enemy_shadow(e, z if e.floats else 0, img.get_width())
             ex, ey = self.P(e.x, e.y, z + bob)
             if e.kind == "ghost":
                 img = img.copy()
@@ -2301,6 +2312,11 @@ class Game:
             return False
         img, ax, ay = fr
         s = self.screen
+        if e.kind == "vampire":    # hovering, bobbing slowly; no shadow at all
+            z = e.z0 + VAMP_BOB * math.sin(e.phase * VAMP_BOB_RATE)
+            ex, ey = self.P(e.x, e.y, z)
+            s.blit(img, (round(ex - ax), round(ey - ay)))         # the anchor is where his feet hang
+            return True
         if e.floats:
             c = (e.phase * BAT_FPS / 4) % 1.0          # 0 wings up .. 0.5 wings down
             z = e.z0 + 8 * math.sin(e.phase * 2) - BAT_BOB * math.cos(2 * math.pi * c)

@@ -902,7 +902,17 @@ def i_key(f):
     f.circ(W * 0.25, H * 0.24, 3, (255, 255, 230))
 
 
-ENEMY_W = {"ghost": 100, "goblin": 80, "bat": 80, "spider": 80, "skeleton": 80, "monster": 110}
+def e_vampire(f):
+    """Placeholder: a pale face over a black cape lined with red."""
+    W, H = f.W, f.H
+    f.poly([(W * 0.5, H * 0.18), (W * 0.95, H * 0.85), (W * 0.5, H * 0.75), (W * 0.05, H * 0.85)], (120, 20, 30))
+    f.poly([(W * 0.5, H * 0.16), (W * 0.78, H * 0.8), (W * 0.22, H * 0.8)], (20, 18, 24))
+    f.ell(W * 0.38, H * 0.04, W * 0.24, H * 0.14, (226, 220, 214))
+    f.circ(W * 0.45, H * 0.1, 1.6, (200, 20, 20))
+    f.circ(W * 0.55, H * 0.1, 1.6, (200, 20, 20))
+
+
+ENEMY_W = {"ghost": 100, "goblin": 80, "bat": 80, "spider": 80, "skeleton": 80, "monster": 110, "vampire": 100}
 ITEM_W = {"key": 48}
 
 
@@ -957,7 +967,7 @@ ART_SCALE = {"pumpkin": 0.6, "suit_of_armour": 1.4, "statue": 1.1, "mangle": 1.1
 # piece shallower than its footprint still sits against the wall at the
 # right size.
 ISO_BOX_ART = {"fireplace", "kitchen_dresser", "chest_of_drawers", "bookcase", "wardrobe", "piano",
-               "grandfather_clock", "linen_press", "desk", "toy_box", "ladder_up"}
+               "grandfather_clock", "linen_press", "desk", "toy_box", "ladder_up", "kitchen_island"}
 
 
 # Chairs and armchairs have a sprite per facing (front towards): E = lower
@@ -1040,7 +1050,7 @@ def wall_shear(img, side, squeeze=True):
 # Animated enemies: enemy kind -> frame set written by tools/cut_anims.py
 # (assets/art/<set>_<n>.png and anims.json with the in-game size and anchor).
 # Painted facing screen right like every enemy; mirrored for screen left.
-ENEMY_ANIMS = {"bat": "bat", "skeleton": "skeleton_walk"}
+ENEMY_ANIMS = {"bat": "bat", "skeleton": "skeleton_walk", "vampire": "vampire"}
 
 
 def load_anims():

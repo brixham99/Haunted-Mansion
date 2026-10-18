@@ -47,6 +47,7 @@ _t("grandfather_clock", "furniture", (1, 1), 215, "Tall Victorian longcase clock
 _t("wardrobe", "furniture", (2, 1), 225, "Heavy double wardrobe, dark oak, carved cornice, two doors with brass handles, one door slightly ajar.", solid=True, search="in")
 _t("bookcase", "furniture", (2, 1), 215, "Floor-to-ceiling bookcase crammed with leather-bound books, a skull and a candle on one shelf, cobwebs in a corner.", solid=True, search="behind")
 _t("chest_of_drawers", "furniture", (2, 1), 100, "Bedroom chest of drawers, walnut, four drawers with brass knobs, a candle and a hand mirror on top.", solid=True, search="in")
+_t("kitchen_island", "furniture", (2, 1), 90, "Victorian kitchen island: panelled cupboard base painted deep green, brass handles, on a plinth, under a scrubbed butcher-block top with a loaf, a mixing bowl and a copper pan.", solid=True, search="in")
 _t("kitchen_dresser", "furniture", (2, 1), 205, "Welsh kitchen dresser, painted pale green and peeling, plates on the rack, cupboards below.", solid=True, search="in")
 _t("fireplace", "furniture", (2, 1), 165, "Marble fireplace with a black iron grate, faint green ghostly flames, candlesticks on the mantelpiece.", solid=True, search="in", glow=(120, 255, 160))
 _t("piano", "furniture", (2, 1), 125, "Upright piano, black lacquer, yellowed keys, sheet music and a candelabra on top.", solid=True, search="in")
@@ -125,6 +126,7 @@ _t("goblin", "enemy", (1, 1), 105, "Small green goblin with pointy ears, ragged 
 _t("bat", "enemy", (1, 1), 60, "Black bat, wings spread, red eyes (flies at head height).")
 _t("spider", "enemy", (1, 1), 70, "Big hairy black spider with red markings, eight legs, glinting eyes.")
 _t("skeleton", "enemy", (1, 1), 198, "Rattling skeleton in a tattered top hat, bony arms reaching forward.")
+_t("vampire", "enemy", (1, 1), 196, "Floating Victorian vampire, black tailcoat and waistcoat, black cape lined with red, high collar, pale face, clawed hands reaching (casts no shadow).")
 _t("monster", "enemy", (1, 1), 190, "Hulking Frankenstein-style monster, green-grey skin, neck bolts, stitched face, too-small black suit.")
 
 ENEMY_STATS = {
@@ -135,6 +137,7 @@ ENEMY_STATS = {
     "spider": dict(speed=2.2, sense=3.0, floats=False, r=0.30, z=0),
     "skeleton": dict(speed=1.4, sense=5.0, floats=False, r=0.30, z=0),
     "monster": dict(speed=1.0, sense=6.0, floats=False, r=0.36, z=0),
+    "vampire": dict(speed=1.15, sense=5.0, floats=True, r=0.30, z=44),   # hovers, drifts, glides at you
 }
 
 # British English flavour text when a search finds nothing.
@@ -144,6 +147,7 @@ SEARCH_LINES = {
     "bookcase": ["Dusty old books. No key here.", "A book falls open: 'Beware the cellar'."],
     "chest_of_drawers": ["Old socks and a dead spider.", "Lavender bags, long gone stale."],
     "kitchen_dresser": ["Cracked plates and a jar of pickled eyes.", "Nothing but crockery."],
+    "kitchen_island": ["Wooden spoons, a rolling pin and a mousetrap (empty).", "Pudding basins and string."],
     "fireplace": ["Cold ashes. Nothing here.", "The chimney moans at you."],
     "piano": ["A wrong note plays all by itself.", "Nothing inside but felt and wire."],
     "desk": ["Unpaid bills from 1887.", "A quill, some ink, no key."],
@@ -165,7 +169,7 @@ SEARCH_LINES = {
 SEARCH_PHRASE = {"behind": "behind the {n}", "in": "in the {n}", "under": "under the {n}"}
 
 NICE_NAMES = {"grandfather_clock": "grandfather clock", "chest_of_drawers": "chest of drawers",
-              "kitchen_dresser": "kitchen dresser", "wine_rack": "wine rack", "toy_box": "toy box",
+              "kitchen_dresser": "kitchen dresser", "kitchen_island": "kitchen island", "wine_rack": "wine rack", "toy_box": "toy box",
               "suit_of_armour": "suit of armour", "linen_press": "linen press", "coal_heap": "coal heap",
               "painting_lady": "portrait", "painting_landscape": "painting", "rocking_horse": "rocking horse"}
 

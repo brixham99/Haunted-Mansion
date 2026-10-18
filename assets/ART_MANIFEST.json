@@ -160,6 +160,40 @@
    ]
   },
   {
+   "name": "kitchen_island",
+   "file": "assets/art/kitchen_island.png",
+   "kind": "furniture",
+   "description": "Victorian kitchen island: panelled cupboard base painted deep green, brass handles, on a plinth, under a scrubbed butcher-block top with a loaf, a mixing bowl and a copper pan.",
+   "target_px": [
+    168,
+    174
+   ],
+   "paint_at_px": [
+    336,
+    348
+   ],
+   "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
+   "used": 1,
+   "rooms": [
+    "Kitchen"
+   ],
+   "placeholder": "assets/art_reference/kitchen_island.png",
+   "footprint_tiles": {
+    "width_along_front": 2,
+    "depth": 1,
+    "grid_when_facing_east": [
+     1,
+     2
+    ]
+   },
+   "object_height_px": 90,
+   "footprint_bottom_vertex_x_px": 56,
+   "gameplay": [
+    "solid",
+    "search:in"
+   ]
+  },
+  {
    "name": "kitchen_dresser",
    "file": "assets/art/kitchen_dresser.png",
    "kind": "furniture",
@@ -677,7 +711,7 @@
     312
    ],
    "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
-   "used": 26,
+   "used": 22,
    "rooms": [
     "Ballroom",
     "Bathroom",
@@ -686,7 +720,6 @@
     "Dining Room",
     "Dressing Room",
     "East Corridor",
-    "Kitchen",
     "Lumber Room",
     "Music Room",
     "Nursery",
@@ -964,10 +997,8 @@
     364
    ],
    "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
-   "used": 1,
-   "rooms": [
-    "Kitchen"
-   ],
+   "used": 0,
+   "rooms": [],
    "placeholder": "assets/art_reference/kitchen_table.png",
    "footprint_tiles": {
     "width_along_front": 2,
@@ -1472,10 +1503,11 @@
     392
    ],
    "view": "Isometric 3/4 view from above (2:1 dimetric), front facing the viewer's lower RIGHT, back against the upper-left wall. Footprint diamond touches the bottom of the canvas. The game mirrors it for objects against the other wall.",
-   "used": 11,
+   "used": 12,
    "rooms": [
     "Ballroom",
     "Cellar Passage",
+    "Conservatory",
     "Crypt",
     "Entrance Hall",
     "Library",
@@ -1837,12 +1869,11 @@
     280
    ],
    "view": "FLAT FRONT VIEW (not isometric), as if photographed straight on. The game squeezes and shears it onto the wall.",
-   "used": 19,
+   "used": 15,
    "rooms": [
     "Ballroom",
     "Bathroom",
     "Billiard Room",
-    "Conservatory",
     "Drawing Room",
     "Dusty Attic",
     "Entrance Hall",
@@ -2209,11 +2240,11 @@
    "description": "Rattling skeleton in a tattered top hat, bony arms reaching forward.",
    "target_px": [
     80,
-    165
+    198
    ],
    "paint_at_px": [
     160,
-    330
+    396
    ],
    "view": "Full figure, 3/4 view facing the viewer's lower RIGHT, feet (or lowest point) at the bottom of the canvas. The game mirrors it when the enemy moves left.",
    "used": 6,
@@ -2226,6 +2257,27 @@
     "Servants' Quarters"
    ],
    "placeholder": "assets/art_reference/skeleton.png",
+   "gameplay": []
+  },
+  {
+   "name": "vampire",
+   "file": "assets/art/vampire.png",
+   "kind": "enemy",
+   "description": "Floating Victorian vampire, black tailcoat and waistcoat, black cape lined with red, high collar, pale face, clawed hands reaching (casts no shadow).",
+   "target_px": [
+    100,
+    196
+   ],
+   "paint_at_px": [
+    200,
+    392
+   ],
+   "view": "Full figure, 3/4 view facing the viewer's lower RIGHT, feet (or lowest point) at the bottom of the canvas. The game mirrors it when the enemy moves left.",
+   "used": 1,
+   "rooms": [
+    "Crypt"
+   ],
+   "placeholder": "assets/art_reference/vampire.png",
    "gameplay": []
   },
   {
