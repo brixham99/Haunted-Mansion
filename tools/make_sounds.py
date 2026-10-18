@@ -300,6 +300,74 @@ def make_hurt_sting():
     return reverb(x, 0.8, 0.3)
 
 
+def make_door_creak():
+    """A big old front door swinging open (~2.2 s): stick-slip hinge pulses
+    (a jittery pulse train whose rate sweeps up and down, so the groan
+    changes pitch) through a bank of wood/door-panel resonances, a thin iron
+    squeal on top, and a soft knock as the door comes to rest."""
+    g = np.random.default_rng(1887)
+    d = 2.3
+    n = int(d * SR)
+    t = np.arange(n) / SR
+
+    def contour(points):
+        xs, ys = zip(*points)
+        return np.interp(t, xs, ys)
+
+    # pulse rate (Hz) of the main groan: slow start, rising strain, sagging end
+    rate = contour([(0, 38), (0.12, 55), (0.35, 120), (0.6, 190), (0.8, 150), (1.0, 230),
+                    (1.25, 260), (1.45, 170), (1.65, 95), (1.8, 60), (2.3, 40)])
+    rate *= 1 + 0.10 * np.sin(2 * np.pi * 3.1 * t) + 0.05 * np.sin(2 * np.pi * 7.3 * t + 1)
+    amp = contour([(0, 0), (0.04, 0.5), (0.2, 0.35), (0.4, 0.9), (0.75, 0.7), (1.0, 1.0),
+                   (1.3, 0.85), (1.6, 0.6), (1.8, 0.25), (1.95, 0.0), (2.3, 0.0)])
+    amp *= 0.75 + 0.25 * np.abs(np.sin(2 * np.pi * 1.7 * t))   # it catches and slips
+    exc = np.zeros(n)
+    ph = 0.0
+    for i in range(n):
+        ph += rate[i] * (1 + g.normal(0, 0.06)) / SR
+        if ph >= 1.0:
+            ph -= 1.0
+            exc[i] += amp[i] * (0.7 + 0.3 * g.random())
+    click = np.exp(-np.arange(int(0.0012 * SR)) / (0.00025 * SR))
+    exc = np.convolve(exc, click)[:n]
+    # resonant bodies: the oak leaf, the frame, the iron hinge
+    modes = [(96, 0.16, 1.0), (152, 0.12, 0.8), (231, 0.10, 0.9), (347, 0.08, 0.7), (512, 0.06, 0.55),
+             (733, 0.05, 0.45), (1046, 0.04, 0.35), (1580, 0.03, 0.25), (2350, 0.02, 0.15)]
+    ln = int(0.4 * SR)
+    tt = np.arange(ln) / SR
+    ir = np.zeros(ln)
+    for f, dec, a in modes:
+        f *= 1 + g.normal(0, 0.01)
+        ir += a * np.sin(2 * np.pi * f * tt + g.random() * 6.28) * np.exp(-tt / dec)
+    body = np.fft.irfft(np.fft.rfft(exc, n + ln) * np.fft.rfft(ir, n + ln), n + ln)[:n]
+    # rasp: friction noise riding on the pulses
+    noise = bp_fast(g.standard_normal(n), 900, 4200)
+    rasp = noise * lp_fast(np.abs(exc), 60) * 6
+    # a thin iron squeal near the end of the swing
+    sq_f = contour([(0, 900), (0.95, 900), (1.05, 1180), (1.25, 1420), (1.4, 1260), (1.55, 980), (2.3, 980)])
+    sq_f *= 1 + 0.015 * np.sin(2 * np.pi * 23 * t)
+    sq_a = contour([(0, 0), (0.95, 0), (1.05, 0.25), (1.3, 0.35), (1.5, 0.12), (1.6, 0), (2.3, 0)])
+    sq = np.sin(2 * np.pi * np.cumsum(sq_f) / SR) * sq_a
+    sq += 0.3 * np.sin(2 * np.pi * 2 * np.cumsum(sq_f) / SR) * sq_a
+    # the leaf settles open: a soft wooden knock
+    knock = np.zeros(n)
+    k0 = int(1.9 * SR)
+    kt = np.arange(n - k0) / SR
+    knock[k0:] = (np.sin(2 * np.pi * 82 * kt) * np.exp(-kt / 0.09) * 0.9
+                  + np.sin(2 * np.pi * 171 * kt) * np.exp(-kt / 0.05) * 0.5
+                  + lp_fast(g.standard_normal(n - k0), 700) * np.exp(-kt / 0.02) * 0.8)
+    x = body / (np.max(np.abs(body)) or 1) + 0.18 * rasp + 0.22 * sq + 0.45 * knock
+    # a big stone hall: a short dark reverb
+    rl = int(1.1 * SR)
+    rir = lp_fast(g.standard_normal(rl), 2200) * np.exp(-np.arange(rl) / SR * 4.5)
+    rir[0] = 0
+    wet = np.fft.irfft(np.fft.rfft(x, n + rl) * np.fft.rfft(rir, n + rl), n + rl)[:n + rl]
+    out = np.concatenate([x, np.zeros(rl)]) + 0.28 * wet / (np.max(np.abs(wet)) or 1) * np.max(np.abs(x))
+    out = out[:int(2.4 * SR)]
+    out *= env(len(out), 0.005, 0.3)
+    return out
+
+
 MAKERS = {
     "title_theme": (make_title_theme, 0.7), "ambience": (make_ambience, 0.7),
     "creak1": (lambda: make_creak(1, 18), 0.6), "creak2": (lambda: make_creak(2, 11), 0.6),
@@ -309,6 +377,7 @@ MAKERS = {
     "goblin": (make_goblin, 0.6), "bat": (make_bat, 0.5), "spider": (make_spider, 0.5),
     "skeleton": (make_skeleton, 0.6), "monster": (make_monster, 0.75), "stairs": (make_stairs, 0.6),
     "rug": (make_rug, 0.5), "hurt": (make_hurt_sting, 0.6),
+    "door_creak": (make_door_creak, 0.85),
 }
 
 

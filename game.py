@@ -43,6 +43,14 @@ PLAYER_R = 0.24                # half-size of the player's collision box (tiles)
 PLAYER_SPEED = 3.0             # tiles per second
 ENEMY_SPEED_SCALE = 0.6        # every baddie's speed (ENEMY_STATS, wander and chase) times this; 1.0 = original
 ENEMY_BOB_RATE = 8.0 * ENEMY_SPEED_SCALE ** 0.5   # walkers' step bob follows their (slower) pace
+# The front door: once the key is carried and someone is in the Entrance Hall
+# it swings open (both leaves, inwards on their outer hinges) and stays open.
+DOOR_OPEN_S = 1.8              # length of the swing
+DOOR_SWING = math.radians(96)  # how far each leaf opens
+# Where the two leaves are in front_door.png (fractions of the art): the
+# stone surround and the fanlight above stay put.
+DOOR_LEAF_X = (43 / 222, 113 / 222, 183 / 222)   # left edge, the seam, right edge
+DOOR_LEAF_Y = (102 / 319, 302 / 319)             # top (under the fanlight), bottom
 PUSH_DELAY = 0.25              # s of shoving before a pushable moves
 SLIDE_TIME = 0.22
 SEARCH_TIME = 0.55
@@ -85,7 +93,7 @@ MOVE_KEYS = {pygame.K_UP: 1, pygame.K_w: 1, pygame.K_DOWN: -1, pygame.K_s: -1}
 ACTION_KEYS = (pygame.K_SPACE, pygame.K_e, pygame.K_RETURN, pygame.K_KP_ENTER)
 MAP_KEYS = (pygame.K_TAB, pygame.K_m)
 
-SOUND_VOL = {"ambience": 0.35, "title_theme": 0.5, "creak1": 0.35, "creak2": 0.35, "door": 0.4,
+SOUND_VOL = {"door_creak": 0.85, "ambience": 0.35, "title_theme": 0.5, "creak1": 0.35, "creak2": 0.35, "door": 0.4,
              "search": 0.5, "key_found": 0.7, "locked": 0.6, "unlock": 0.8, "win": 0.7, "gameover": 0.7,
              "push": 0.5, "ghost": 0.45, "goblin": 0.5, "bat": 0.35, "spider": 0.4, "skeleton": 0.5,
              "monster": 0.6, "stairs": 0.5, "rug": 0.5, "hurt": 0.5, "step1": 0.25, "step2": 0.25,
@@ -317,6 +325,7 @@ class Game:
         self.house = M.Mansion()
         self.key_place = self.house.place_key(self.rng, hidden=self.key_hidden)
         self.key_state = "hidden"         # hidden | revealed | carried
+        self.door_t = None                # front door: None = shut, else seconds into its swing (open at DOOR_OPEN_S)
         self.key_pos = None               # floor position once revealed
         if self.key_place[1] == "open":
             self.key_state = "revealed"
@@ -742,6 +751,8 @@ class Game:
 
     def update_watch(self, dt):
         cp = self.coop
+        if not self.fade:
+            self.update_door(dt)
         for o in self.room.objs:
             if o.slide_t > 0:
                 o.slide_t = max(0.0, o.slide_t - dt)
@@ -929,6 +940,7 @@ class Game:
         if self.show_map:           # two players: the house carries on behind the map
             keys, auto, ctrl = None, None, (0, 0)
         self.time += dt
+        self.update_door(dt)
         self.locked_cd = max(0.0, self.locked_cd - dt)
         self.invuln = max(0.0, self.invuln - dt)
         self.grace = max(0.0, self.grace - dt)
@@ -1004,6 +1016,47 @@ class Game:
         if self.creak_t <= 0:
             self.sounds.play(random.choice(("creak1", "creak2")), 0.6)
             self.creak_t = random.uniform(9, 22)
+
+    # ------------------------------------------------------------ the front door
+    def someone_in_hall(self):
+        """Is a player who is still in the house standing in the Entrance Hall?"""
+        if self.mode == "play" and self.out is None and self.room.id == M.START_ROOM:
+            return True
+        cp = self.coop
+        if cp is not None:
+            p = cp.partner
+            if p.seen and not p.fade and p.room == M.START_ROOM and cp.partner_out() is None:
+                return True
+        return False
+
+    def open_front_door(self):
+        """Start the door's swing (with the creak) if we are looking at the
+        Entrance Hall; anywhere else it is simply open by the time we get there.
+        Once open it stays open: no second swing."""
+        if self.door_t is not None:
+            return
+        if self.mode in ("play", "watch") and self.room.id == M.START_ROOM:
+            self.door_t = 0.0
+            self.sounds.play("door_creak")
+        else:
+            self.door_t = DOOR_OPEN_S
+
+    def update_door(self, dt):
+        if self.door_t is None:
+            if self.key_state == "carried" and self.someone_in_hall():
+                self.open_front_door()
+        elif self.door_t < DOOR_OPEN_S:
+            self.door_t = min(DOOR_OPEN_S, self.door_t + dt)
+
+    def door_angle(self):
+        """How far the leaves have swung (radians): a heavy start, a long
+        swing, and a slow settle."""
+        if self.door_t is None:
+            return 0.0
+        u = max(0.0, min(1.0, self.door_t / DOOR_OPEN_S))
+        u = u * u * (3 - 2 * u)                       # ease in and out
+        u = u + 0.035 * math.sin(u * math.pi * 3) * (1 - u)   # it judders as the hinges catch
+        return DOOR_SWING * max(0.0, min(1.0, u))
 
     def at_front_door(self):
         fd = self.room.front_door()
@@ -1578,7 +1631,9 @@ class Game:
             self.dark_cache[r.id] = self.build_darkness(r)
         s.blit(self.bg_cache[r.id], (0, 0))
         fd = r.front_door()
-        if fd is not None and self.won:   # the front door stands open on the moonlit night
+        if fd is not None and self.door_t is not None:
+            self.draw_front_door(fd)      # swinging (or standing) open on the moonlit night
+        elif fd is not None and self.won:   # the front door stands open on the moonlit night
             Q = lambda u, z: self.P(u, 0, z)
             pygame.draw.polygon(s, (50, 70, 120), [Q(fd.index + .1, 0), Q(fd.index + 1.9, 0), Q(fd.index + 1.9, DOOR_H - 12), Q(fd.index + .1, DOOR_H - 12)])
         for o in r.objs:   # flat floor things first
@@ -1622,6 +1677,8 @@ class Game:
             qx, qy = self.P(self.coop.partner.x, self.coop.partner.y, 70)
             dark.blit(self.player_light, (qx - lr, qy - lr), special_flags=pygame.BLEND_RGBA_SUB)
         s.blit(dark, (0, 0))
+        if fd is not None and self.door_t is not None:
+            self.draw_moonlight(fd)
         t = self.time
         for o in r.objs:
             g = o.t.get("glow")
@@ -1663,6 +1720,139 @@ class Game:
             s.blit(veil, (0, 0))
         if self.mode == "end":
             self.draw_end()
+
+    # ------------------------------------------------------------ the open front door
+    def _door_geom(self, fd):
+        """(u0, seam, u1) along the north wall and (z0, z1) of the leaves."""
+        h = T["front_door"]["h"]
+        u0, us, u1 = (fd.index + 2 * f for f in DOOR_LEAF_X)
+        z0, z1 = h * (1 - DOOR_LEAF_Y[1]), h * (1 - DOOR_LEAF_Y[0])
+        return u0, us, u1, z0, z1
+
+    def _plane_blit(self, img, top, dx, dy, hinge_left=True, k=1.0):
+        """Blit flat art onto a vertical plane in the room: its top edge runs
+        from `top` (screen) by (dx, dy) px, its height is the image's. The
+        isometric view is a parallel projection, so this column-by-column
+        shear is exact. hinge_left: image column 0 sits at `top`."""
+        w, h = img.get_size()
+        cols = max(1, int(round(abs(dx))))
+        rise = int(math.ceil(abs(dy))) + 1
+        src = pygame.surfarray.pixels3d(img)
+        sa = pygame.surfarray.pixels_alpha(img)
+        out = pygame.Surface((cols, h + rise), pygame.SRCALPHA, 32)
+        out.fill((0, 0, 0, 0))
+        dst = pygame.surfarray.pixels3d(out)
+        da = pygame.surfarray.pixels_alpha(out)
+        for i in range(cols):
+            t = (i + 0.5) / cols
+            if dx < 0:
+                t = 1.0 - t                        # screen columns run back towards the hinge
+            c = min(w - 1, int((t if hinge_left else 1 - t) * w))
+            off = int(round(t * dy - min(0.0, dy)))
+            dst[i, off:off + h] = src[c] * k
+            da[i, off:off + h] = sa[c]
+        del src, sa, dst, da
+        x = top[0] + min(0.0, dx)
+        y = top[1] + min(0.0, dy)
+        self.screen.blit(out, (round(x), round(y)))
+
+    def _night(self, w, h):
+        """The view out of the front door: moonlit garden in the fog."""
+        key = ("night", w, h)
+        img = self.glow_cache.get(key)
+        if img is not None:
+            return img
+        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+        v = yy / max(1, h - 1)
+        sky = np.stack([26 + 34 * v, 36 + 44 * v, 74 + 42 * v], -1)
+        mx, my, mr = w * 0.68, h * 0.22, max(4.0, w * 0.13)
+        d = np.sqrt((xx - mx) ** 2 + (yy - my) ** 2)
+        sky += (np.clip(1 - d / (mr * 4.5), 0, 1) ** 2 * 70)[..., None] * np.array([0.8, 0.9, 1.0])
+        moon = d < mr
+        sky[moon] = (226, 230, 214)
+        rnd = random.Random(5)
+        for _ in range(w * h // 260):                  # a few stars
+            sx, sy = rnd.randrange(w), rnd.randrange(int(h * 0.45))
+            if not moon[sy, sx]:
+                sky[sy, sx] = (170, 176, 200)
+        # bare trees and a garden wall in silhouette
+        ground = h * 0.72
+        sil = np.zeros((h, w), bool)
+        for tx, th, tw in ((0.15, 0.62, 0.05), (0.88, 0.5, 0.045), (0.42, 0.32, 0.03)):
+            cx = tx * w
+            top = ground - th * h
+            sil |= (np.abs(xx - cx) < tw * w) & (yy > top) & (yy < ground)
+            for b in range(5):                         # branches
+                by = top + (b + 0.5) / 5 * (ground - top) * 0.6
+                ang = (1 if b % 2 else -1) * (0.55 + 0.1 * b)
+                ln = th * h * 0.35 * (1 - b / 6)
+                t = np.clip(((xx - cx) * math.sin(ang) - (yy - by) * -math.cos(ang)) / ln, 0, 1)
+                px_, py_ = cx + t * ln * math.sin(ang), by - t * ln * math.cos(ang)
+                sil |= ((xx - px_) ** 2 + (yy - py_) ** 2 < 1.2) & (t > 0) & (t < 1)
+        sil |= yy > ground + np.sin(xx * 0.4) * 1.5
+        sky[sil] = (10, 12, 20)
+        # the path to the gate, catching the moon
+        path = (yy > ground + 2) & (np.abs(xx - w * 0.5) < (yy - ground) * 0.9 + 3)
+        sky[path] = (54, 60, 74)
+        # low fog, thicker near the ground
+        fog = np.clip((yy - h * 0.5) / (h * 0.5), 0, 1) ** 1.5
+        wav = 0.5 + 0.5 * np.sin(xx * 0.21 + yy * 0.07) * np.sin(xx * 0.05 - yy * 0.11)
+        f = (fog * (0.35 + 0.35 * wav))[..., None]
+        sky = sky * (1 - f) + np.array([120, 132, 150]) * f
+        img = pygame.Surface((w, h), pygame.SRCALPHA, 32)
+        pygame.surfarray.blit_array(img, np.clip(sky, 0, 255).astype(np.uint8).transpose(1, 0, 2))
+        img.fill((0, 0, 0, 255), special_flags=pygame.BLEND_RGBA_MAX)
+        self.glow_cache[key] = img
+        return img
+
+    def _leaf(self, which, h):
+        key = ("leaf", which, h)
+        img = self.glow_cache.get(key)
+        if img is None:
+            base = self.art.base("front_door")
+            bw, bh = base.get_size()
+            a, b = (DOOR_LEAF_X[0], DOOR_LEAF_X[1]) if which == "left" else (DOOR_LEAF_X[1], DOOR_LEAF_X[2])
+            rect = pygame.Rect(round(a * bw), round(DOOR_LEAF_Y[0] * bh), round((b - a) * bw), round((DOOR_LEAF_Y[1] - DOOR_LEAF_Y[0]) * bh))
+            img = pygame.transform.smoothscale(base.subsurface(rect).copy(), (rect.w, h))
+            self.glow_cache[key] = img
+        return img
+
+    def draw_front_door(self, fd):
+        """The double front door, swinging inwards on its outer hinges."""
+        u0, us, u1, z0, z1 = self._door_geom(fd)
+        hpx = int(round(z1 - z0))
+        span = u1 - u0
+        self._plane_blit(self._night(max(2, int(round(span * HW))), hpx), self.P(u0, 0, z1), span * HW, span * HH)
+        a = self.door_angle()
+        ca, sa = math.cos(a), math.sin(a)
+        for which, hinge, w, sgn in (("left", u0, us - u0, 1), ("right", u1, u1 - us, -1)):
+            ex, ey = sgn * w * ca, w * sa                       # free edge, relative to the hinge (tiles)
+            top = self.P(hinge, 0, z1)
+            dx, dy = (ex - ey) * HW, (ex + ey) * HH
+            k = 1.0 - 0.38 * sa if sgn > 0 else 1.0 - 0.22 * sa   # turning out of the light
+            self._plane_blit(self._leaf(which, hpx), top, dx, dy, hinge_left=(sgn > 0), k=k)
+            # the leaf's thickness along its free edge
+            fx, fy = hinge + ex, ey
+            pygame.draw.line(self.screen, (40, 24, 14), self.P(fx, fy, z0), self.P(fx, fy, z1), 3 if a > 0.2 else 1)
+
+    def draw_moonlight(self, fd):
+        """Pale moonlight through the opening, spilling across the floor."""
+        k = self.door_angle() / DOOR_SWING
+        if k <= 0.02:
+            return
+        u0, us, u1, z0, z1 = self._door_geom(fd)
+        P = self.P
+        glow = pygame.Surface((WIN_W, WIN_H))
+        glow.fill((0, 0, 0))
+        for i in reversed(range(5)):                   # widest and faintest first
+            reach = 0.6 + i * 0.7
+            c = 16 * k * (1 - i / 5) + 3 * k
+            spread = 0.25 + i * 0.18
+            near = min(reach, 0.68)                    # keep off the open leaves by the jambs
+            poly = [P(u0 + .1, 0.02), P(u1 - .1, 0.02), P(u1 - .1, near), P(u1 + spread * 0.5, reach),
+                    P(u0 - spread * 0.2, reach), P(u0 + .1, near)]
+            pygame.draw.polygon(glow, (int(c), int(c * 1.1), int(c * 1.4)), poly)
+        self.screen.blit(glow, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
 
     def blit_footprint(self, name, o, x, y):
         """Bottom of the sprite on the front corner of the footprint, centred

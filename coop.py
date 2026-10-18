@@ -161,7 +161,8 @@ class Coop:
     def my_pose(self):
         g = self.g
         return {"room": g.room.id, "x": round(g.px, 3), "y": round(g.py, 3), "f": g.facing,
-                "m": bool(g.moving) and g.out is None, "fade": bool(g.fade), "out": g.out, "k": g.killer if g.out == "dead" else None}
+                "m": bool(g.moving) and g.out is None, "fade": bool(g.fade), "out": g.out, "k": g.killer if g.out == "dead" else None,
+                "door": g.door_t is not None}
 
     def send_state(self):
         g = self.g
@@ -200,6 +201,8 @@ class Coop:
             return
         old_room = p.room if p.seen else None
         p.update(pose, self.cycle)
+        if pose.get("door") and g.door_t is None:
+            g.open_front_door()               # the other game saw it open: so is ours (swinging if we're in the hall)
         if self.host:
             if p.room != old_room:
                 self.partner_entered(p.room, old_room)

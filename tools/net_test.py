@@ -366,6 +366,43 @@ def main():
     host.to_title()
     cli.to_title()
 
+    # ---- 2c. the front door: swings open (with its creak) on each game whose
+    # player is in the Entrance Hall once the key is carried; open, silently,
+    # on the other; the state follows across; no second swing
+    host, cli, games = connect(screen, 13, PORT, via_scan=False)
+    check(host.door_t is None and cli.door_t is None, "the front door starts shut")
+    cli.enter_room("drawing_room", ("door", "E", 0))
+    wait(games, lambda: not cli.fade and host.coop.partner.room == "drawing_room", 120)
+    step(games, 5)
+    host.key_state = "carried"               # (as if the host had just picked it up in the hall)
+    host.coop.announce_key()
+    step(games, 4)
+    check(host.door_t is not None and host.door_t < G.DOOR_OPEN_S and host.sounds.requested.get("door_creak") == 1,
+          f"the host is in the hall with the key: the door starts to swing, with one creak ({host.door_t})")
+    wait(games, lambda: cli.door_t is not None, 60)
+    check(cli.door_t == G.DOOR_OPEN_S and not cli.sounds.requested.get("door_creak"),
+          f"the joiner, elsewhere, has it open without the swing or the creak ({cli.door_t})")
+    step(games, int(G.DOOR_OPEN_S / DT) + 5)
+    check(host.door_t == G.DOOR_OPEN_S, "the swing finishes and the door stays open")
+    cli.enter_room("entrance_hall", ("door", "W", 0))
+    host.enter_room("drawing_room", ("door", "E", 0))
+    step(games, 40)
+    host.enter_room("entrance_hall", ("door", "W", 0))
+    step(games, 40)
+    check(host.door_t == cli.door_t == G.DOOR_OPEN_S and host.sounds.requested.get("door_creak") == 1
+          and not cli.sounds.requested.get("door_creak"), "coming back into the hall: still open, no replay")
+    host.to_title()
+    cli.to_title()
+    step(games, 5)
+    host, cli, games = connect(screen, 14, PORT, via_scan=False)
+    host.key_state = "carried"               # both in the hall this time
+    wait(games, lambda: host.door_t is not None and cli.door_t is not None, 60)
+    check(cli.sounds.requested.get("door_creak") == 1 and host.sounds.requested.get("door_creak") == 1,
+          "both players in the hall: the door swings, and creaks, on both games")
+    host.to_title()
+    cli.to_title()
+    step(games, 5)
+
     # ---- 3. disconnects mid-game
     host, cli, games = connect(screen, 7, PORT, via_scan=False)
     host.to_title()                          # host quits: says goodbye
