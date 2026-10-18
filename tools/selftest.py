@@ -603,6 +603,13 @@ def main():
                 check(False, f"hiding place {p}: {e}")
         print(f"every non-open hiding place (+40 open tiles): {okc}/{len(places)} found and escaped")
     # ---- screens draw without errors
+    bd = pygame.image.load(G.TITLE_BACKDROP)
+    check(bd.get_width() / bd.get_height() >= G.WIN_W / G.WIN_H - 1e-6 and bd.get_height() >= G.WIN_H * 0.7,
+          f"the title backdrop painting is there and wide enough to cover-fit {G.WIN_W}x{G.WIN_H} ({bd.get_size()})")
+    g.title_bg = None
+    tb = g.build_title_bg()
+    mean = pygame.transform.average_color(tb)
+    check(tb.get_size() == (G.WIN_W, G.WIN_H) and 15 < sum(mean[:3]) / 3 < 110, f"title backdrop covers the window, dimmed (mean {mean[:3]})")
     for scene in ("title", "room", "map", "end"):
         g.mode = {"title": "title", "end": "end"}.get(scene, "play")
         g.show_map = scene == "map"

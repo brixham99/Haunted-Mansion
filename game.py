@@ -81,6 +81,13 @@ BOARD_REFRESH = 3600.0         # re-fetch the Top 10 (and retry unsent scores) h
 TITLE_NAME = "Haunted Mansion"
 TITLE_OPTIONS = ("Play alone", "Host a game", "Join a game")
 COPYRIGHT = "\u00a92026 Nathan, Archie & Holly Anderson. Working title."
+TITLE_BACKDROP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "art", "title_backdrop.jpg")
+TITLE_DIM = 0.64                  # the painting at ~64% brightness, before the vignette
+TITLE_MOON = (198, 146)           # where the moon is in the painting (px)
+TITLE_WINDOWS = ((169, 540), (262, 540), (375, 540), (440, 232), (619, 288), (819, 238), (800, 352), (825, 352), (1087, 525))
+TITLE_CHARS_X = 44                # the character picker, left
+TITLE_OPTS_XY = (948, 150)        # alone / host / join, top right
+TITLE_PANEL_Y = 560               # Top 10 / controls / lobby panel, under the front door's arch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOUND_DIR = os.path.join(HERE, "assets", "sounds")
@@ -2483,6 +2490,46 @@ class Game:
 
     # ------------------------------------------------------------ title
     def build_title_bg(self):
+        """The painted house front (assets/art/title_backdrop.jpg), cover-fitted
+        to the window, dimmed and vignetted so the text on top reads; the old
+        procedural night scene if the painting is missing."""
+        try:
+            img = pygame.image.load(TITLE_BACKDROP).convert()
+        except (pygame.error, FileNotFoundError):
+            return self.build_title_bg_procedural()
+        w, h = img.get_size()
+        k = max(WIN_W / w, WIN_H / h)                       # cover, not contain
+        if (round(w * k), round(h * k)) != (w, h):
+            img = pygame.transform.smoothscale(img, (round(w * k), round(h * k)))
+        w, h = img.get_size()
+        out = pygame.Surface((WIN_W, WIN_H)).convert()
+        out.blit(img, (-(w - WIN_W) // 2, -(h - WIN_H) // 2))
+        a = pygame.surfarray.array3d(out).astype(np.float32)
+        xx = (np.arange(WIN_W, dtype=np.float32)[:, None] - WIN_W / 2) / (WIN_W / 2)
+        yy = (np.arange(WIN_H, dtype=np.float32)[None, :] - WIN_H * 0.45) / (WIN_H / 2)
+        vig = 1.0 - 0.5 * np.clip(xx ** 2 * 0.8 + yy ** 2, 0, 1) ** 1.3
+        y = np.arange(WIN_H, dtype=np.float32)[None, :]
+        band = 1.0 - 0.3 * np.clip((175 - y) / 175, 0, 1) - 0.35 * np.clip((y - 540) / 140, 0, 1)   # under the title and the panels
+        a *= (TITLE_DIM * vig * band)[:, :, None]
+        pygame.surfarray.blit_array(out, np.clip(a, 0, 255).astype(np.uint8))
+        return out
+
+    def draw_title_life(self):
+        """Cheap, quiet life on the painting: the moon's glow breathing slowly
+        and candlelight flickering in a few of the windows."""
+        s, t = self.screen, self.title_t
+        lvl = round((0.55 + 0.45 * math.sin(t * 0.5)) * 6) / 6
+        mx, my = TITLE_MOON
+        gs = self.glow_sprite(tuple(int(c * lvl) for c in (70, 72, 84)), 120)
+        s.blit(gs, (mx - 120, my - 120), special_flags=pygame.BLEND_RGB_ADD)
+        for i, (wx, wy) in enumerate(TITLE_WINDOWS):
+            f = math.sin(t * (2.3 + i * 0.37) + i * 1.7) * math.sin(t * (3.1 + i * 0.21) + i)
+            f = round(max(0.0, f) * 4) / 4
+            if f > 0:
+                gs = self.glow_sprite(tuple(int(c * f) for c in (60, 38, 12)), 22)
+                s.blit(gs, (wx - 22, wy - 22), special_flags=pygame.BLEND_RGB_ADD)
+
+    def build_title_bg_procedural(self):
         s = pygame.Surface((WIN_W, WIN_H)).convert()
         top, bot = np.array((30, 16, 50)), np.array((120, 50, 30))
         k = np.linspace(0, 1, WIN_H)[:, None] ** 1.6
@@ -2542,6 +2589,7 @@ class Game:
             self.title_bg = self.build_title_bg()
         s.blit(self.title_bg, (0, 0))
         t = self.title_t
+        self.draw_title_life()
         for i in range(6):   # bats
             bx = (i * 230 + t * (60 + i * 9)) % (WIN_W + 200) - 100
             by = 120 + 50 * math.sin(t * 0.7 + i * 2) + i * 18
@@ -2551,15 +2599,15 @@ class Game:
             fx = (t * (14 + i * 6) + i * 400) % (WIN_W + 600) - 600
             fog = pygame.Surface((600, 90), pygame.SRCALPHA)
             pygame.draw.ellipse(fog, (200, 190, 210, 16), fog.get_rect())
-            s.blit(fog, (fx, 660 + i * 30))
+            s.blit(fog, (fx, 600 + i * 40))
         title = self.text(self.f_title, TITLE_NAME, (255, 150, 40))
         s.blit(title, ((WIN_W - title.get_width()) / 2, 28))
         sub = self.text(self.f_sub, "Find the key. Escape the house.", (230, 210, 180))
         s.blit(sub, ((WIN_W - sub.get_width()) / 2, 28 + title.get_height()))
         ch = self.text(self.f_help, "Choose Archie or Holly", (255, 220, 160))
-        s.blit(ch, ((WIN_W - ch.get_width()) / 2, 180))
         bw, bh, gap = 160, 262, 40
-        x0 = (WIN_W - (bw * 2 + gap)) / 2
+        x0 = TITLE_CHARS_X                 # left, clear of the tower and the front door
+        s.blit(ch, (x0 + (bw * 2 + gap - ch.get_width()) / 2, 180))
         for i, cid in enumerate(CHAR_ORDER):
             sel = i == self.title_pick
             ch = self.chars[cid]
@@ -2591,7 +2639,7 @@ class Game:
     def draw_title_options(self):
         """Play alone / Host a game / Join a game, to the right of the characters."""
         s = self.screen
-        x, y = 880, 262
+        x, y = TITLE_OPTS_XY             # top right, above the conservatory
         hd = self.text(self.f_small, "Up / Down: choose", (200, 170, 130))
         s.blit(hd, (x + (300 - hd.get_width()) / 2, y - 26))
         for i, label in enumerate(TITLE_OPTIONS):
@@ -2610,8 +2658,9 @@ class Game:
         """Host or join, in place of the controls panel."""
         s = self.screen
         lines = self.lobby.lines()
-        pw, py = 960, 524
+        pw = 960
         ph = 46 + 30 * (len(lines) - 1) + 14
+        py = min(TITLE_PANEL_Y, WIN_H - 40 - ph)     # a long list grows upwards
         panel = pygame.Surface((pw, ph), pygame.SRCALPHA)
         panel.fill((8, 4, 12, 215))
         pygame.draw.rect(panel, (230, 130, 40, 230), panel.get_rect(), 2, border_radius=6)
@@ -2634,23 +2683,23 @@ class Game:
     def draw_top10(self):
         """The shared Top 10 (two columns of five) in place of the controls panel."""
         s = self.screen
-        pw, ph, py = 960, 210, 524
+        pw, ph, py = 960, 196, TITLE_PANEL_Y
         px = (WIN_W - pw) / 2
         panel = pygame.Surface((pw, ph), pygame.SRCALPHA)
         panel.fill((8, 4, 12, 190))
         pygame.draw.rect(panel, (150, 90, 40, 220), panel.get_rect(), 1, border_radius=6)
         s.blit(panel, (px, py))
         hd = self.text(self.f_sub, "Top 10 Scores", (255, 170, 60))
-        s.blit(hd, ((WIN_W - hd.get_width()) / 2, py + 8))
+        s.blit(hd, ((WIN_W - hd.get_width()) / 2, py + 4))
         rows = self.board.top(scores.TOP_N)
         if not rows:
             msg = {"loading": "Fetching the scores\u2026", "offline": "Scores unavailable offline"}.get(
                 self.board.status, "No scores yet \u2013 be the first!")
             im = self.text(self.f_help, msg, (235, 220, 190))
-            s.blit(im, ((WIN_W - im.get_width()) / 2, py + 96))
+            s.blit(im, ((WIN_W - im.get_width()) / 2, py + 88))
         for i, (name, score, country) in enumerate(rows):
             col_x = px + (60 if i < 5 else pw / 2 + 30)
-            y = py + 54 + (i % 5) * 28
+            y = py + 44 + (i % 5) * 26
             colour = (255, 200, 90) if i == 0 else (235, 220, 190)
             num = self.text(self.f_help, f"{i + 1}.", colour)
             s.blit(num, (col_x + 34 - num.get_width(), y))
@@ -2663,7 +2712,7 @@ class Game:
         bl = self.best_line()
         if bl:
             im = self.text(self.f_small, bl, (255, 200, 110))
-            s.blit(im, ((WIN_W - im.get_width()) / 2, py + ph - 24))
+            s.blit(im, ((WIN_W - im.get_width()) / 2, py + ph - 23))
 
     def draw_controls(self):
         s = self.screen
@@ -2676,8 +2725,8 @@ class Game:
         panel = pygame.Surface((960, ph), pygame.SRCALPHA)
         panel.fill((8, 4, 12, 170))
         pygame.draw.rect(panel, (120, 70, 40, 200), panel.get_rect(), 1, border_radius=6)
-        s.blit(panel, ((WIN_W - 960) / 2, 538))
-        y = 546
+        s.blit(panel, ((WIN_W - 960) / 2, TITLE_PANEL_Y + 6))
+        y = TITLE_PANEL_Y + 14
         for ln in lines:
             im = self.text(self.f_help, ln, (235, 220, 190))
             s.blit(im, ((WIN_W - im.get_width()) / 2, y))
