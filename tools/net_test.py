@@ -223,7 +223,14 @@ def main():
           f"and loops his four frames at ~6 fps ({sorted(set(vseen))})")
     check(cv and abs(cv[-1].x - vp.x) < 0.2 and abs(cv[-1].y - vp.y) < 0.2 and cv[-1].left == vp.left,
           "where the host has him, facing the same way")
-    check("vampire" in G.NO_SHADOW, "and neither game draws him a shadow")
+    drawn = []
+    for gm in games:
+        orig = gm.draw_enemy_shadow
+        gm.draw_enemy_shadow = lambda *a, _o=orig, **k: (drawn.append((a[0].kind, gm)), _o(*a, **k))
+        gm.draw()
+        del gm.draw_enemy_shadow
+    check("vampire" not in G.NO_SHADOW and {id(g) for k, g in drawn if k == "vampire"} >= {id(cli)},
+          "and he casts a soft shadow, so you can judge his height")
     host.enemies.remove(vp)
     host.grace = grace
     step(games, 5)

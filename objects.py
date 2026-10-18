@@ -47,7 +47,7 @@ _t("grandfather_clock", "furniture", (1, 1), 215, "Tall Victorian longcase clock
 _t("wardrobe", "furniture", (2, 1), 225, "Heavy double wardrobe, dark oak, carved cornice, two doors with brass handles, one door slightly ajar.", solid=True, search="in")
 _t("bookcase", "furniture", (2, 1), 215, "Floor-to-ceiling bookcase crammed with leather-bound books, a skull and a candle on one shelf, cobwebs in a corner.", solid=True, search="behind")
 _t("chest_of_drawers", "furniture", (2, 1), 100, "Bedroom chest of drawers, walnut, four drawers with brass knobs, a candle and a hand mirror on top.", solid=True, search="in")
-_t("kitchen_island", "furniture", (2, 1), 90, "Victorian kitchen island: panelled cupboard base painted deep green, brass handles, on a plinth, under a scrubbed butcher-block top with a loaf, a mixing bowl and a copper pan.", solid=True, search="in")
+_t("kitchen_island", "furniture", (3, 3), 90, "Large square Victorian kitchen island: panelled cupboard base painted deep green, brass handles, on a plinth, under a scrubbed butcher-block top with a loaf, a mixing bowl and a copper pan.", solid=True, search="in")
 _t("kitchen_dresser", "furniture", (2, 1), 205, "Welsh kitchen dresser, painted pale green and peeling, plates on the rack, cupboards below.", solid=True, search="in")
 _t("fireplace", "furniture", (2, 1), 165, "Marble fireplace with a black iron grate, faint green ghostly flames, candlesticks on the mantelpiece.", solid=True, search="in", glow=(120, 255, 160))
 _t("piano", "furniture", (2, 1), 125, "Upright piano, black lacquer, yellowed keys, sheet music and a candelabra on top.", solid=True, search="in")

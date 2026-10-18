@@ -553,7 +553,7 @@ def kitchen_checks(house):
     types = [o.type for o in k.objs]
     check("kitchen_table" not in types and "chair" not in types, f"no table or chairs in the kitchen {types}")
     isl = [o for o in k.objs if o.type == "kitchen_island"]
-    check(len(isl) == 1 and isl[0].gx * isl[0].gy >= 2, "a kitchen island (2 tiles) in their place")
+    check(len(isl) == 1 and isl[0].gx == isl[0].gy >= 2, "a large square kitchen island in their place")
     check(T["kitchen_island"]["solid"] and "kitchen_island" in art.ISO_BOX_ART, "the island is solid iso-box art")
     rng_ = next(o for o in k.objs if o.type == "range_cooker")
     dres = next(o for o in k.objs if o.type == "kitchen_dresser")
@@ -569,11 +569,19 @@ def kitchen_checks(house):
         check(near(o), f"kitchen: the {t} can be reached")
     opens = [p for p in house.open_places() if p[0] == "kitchen"]
     check(len(opens) >= 10, f"the key can still turn up in the kitchen ({len(opens)} tiles)")
+    # windows only on outside walls: never on a wall shared with another room on the house plan
+    from mansion import ROOMS
+    occ = {(r["floor"], r["map"]) for r in ROOMS.values()}
+    dirs = {"N": (0, -1), "S": (0, 1), "E": (1, 0), "W": (-1, 0)}
+    inner = [(key, w[1]) for key, r in ROOMS.items() for w in r["wall"] if w[0] == "window"
+             and (r["floor"], (r["map"][0] + dirs[w[1]][0], r["map"][1] + dirs[w[1]][1])) in occ]
+    check(not inner, f"every window is on an outside wall {inner}")
+    check(not any(w[0] == "window" for w in ROOMS["kitchen"]["wall"]), "no window in the kitchen (an inside wall)")
     print(f"kitchen: island at {isl[0].cells()}, range-dresser gap {gap}, {len(opens)} open key tiles")
 
 
 def vampire_checks(g):
-    """The Crypt's vampire: a floater, animated, hovering, and no shadow at all."""
+    """The Crypt's vampire: a floater, animated, hovering, with a soft shadow that shrinks with height."""
     import numpy as np
     check("vampire" in g.house.rooms["crypt"].enemies, "a vampire haunts the Crypt")
     e = G.Enemy("vampire", 3.0, 3.0, g.rng)
@@ -606,13 +614,22 @@ def vampire_checks(g):
     bare = pygame.surfarray.array3d(g.screen).astype(int)
     v = G.Enemy("vampire", 4.5, 5.5, g.rng)
     g.enemies = [v]
-    zs = []
+    zs, sizes = [], []
+    osh = art.soft_shadow
     for i in range(40):
         v.phase = i * 0.1
         z = v.z0 + G.VAMP_BOB * math.sin(v.phase * G.VAMP_BOB_RATE)
         zs.append(z)
+        got = []
+        art.soft_shadow = lambda *a, **k: (got.append(a), osh(*a, **k))[1]
         g.draw()
-    check(not calls, f"no shadow is ever drawn for the vampire ({calls})")
+        art.soft_shadow = osh
+        sz = [a for a in got if len(a) >= 3]
+        if calls and sz:
+            sizes.append((z, sz[-1][0], sz[-1][2]))
+    check(calls.count("vampire") == 40, f"a shadow is drawn for the vampire every frame ({len(calls)})")
+    lo, hi = min(sizes), max(sizes)
+    check(hi[1] < lo[1] and hi[2] < lo[2], f"his shadow shrinks and fades as he rises ({lo[1]:.1f}->{hi[1]:.1f})")
     check(min(zs) > 25 and max(zs) - min(zs) > 6, f"he bobs slowly, always clear of the floor (z {min(zs):.0f}-{max(zs):.0f})")
     v.phase = 0.0
     g.draw()
@@ -621,9 +638,10 @@ def vampire_checks(g):
     fx, fy = int(fx), int(fy)
     win = (slice(fx - 30, fx + 30), slice(fy - 8, fy + 8))
     diff = int((np.abs(now[win] - bare[win]).sum(2) > 6).sum())
-    check(diff == 0, f"the floor beneath him is untouched: no shadow, no contact ellipse ({diff} px changed)")
+    check(diff > 20, f"a soft shadow darkens the floor beneath him ({diff} px changed)")
+    check((now[win].sum(2) <= bare[win].sum(2) + 3).all(), "the shadow only darkens")
     del g.draw_enemy_shadow
-    for k in ("bat", "skeleton"):
+    for k in ("bat", "skeleton", "vampire"):
         check(k not in G.NO_SHADOW, f"{k}s keep their soft shadows")
     check("vampire" in G.SOUND_VOL and G.SOUND_VOL["vampire"] <= 0.4, "a quiet hiss for him")
     # behaviour: drifts slowly, glides at you when close, hisses once, and hurts

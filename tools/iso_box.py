@@ -708,30 +708,30 @@ def _loaf(w=64, h=34):
 
 
 def build_kitchen_island():
-    """A Victorian kitchen island: the dresser's panelled cupboard base (two
-    drawers over two doors on a plinth, brass handles) repainted deep green,
-    freestanding in the middle of its 2 x 1 footprint, under a scrubbed
-    butcher-block top; a copper pan, a mixing bowl and a loaf on a board."""
+    """A big square Victorian kitchen island (3 x 3 tiles): the dresser's
+    panelled cupboard base (drawers over doors on a plinth, brass handles)
+    repainted deep green and widened, freestanding in the middle
+    of its footprint under a scrubbed butcher-block top; a bread board with a
+    loaf, a mixing bowl, a copper pan and a cake spread out on top."""
     F = faces()
     sc = Scene("kitchen_island")
     green = (66, 96, 72)
     base = recolour(F["dr_base"], green)
+    hb = 1.8 * TE * base.height / base.width            # ~71 px: worktop height, as before
+    x0, depth = 0.32, 2.36
     side = recolour(F["dr_side"], green)
-    hb = 1.8 * TE * base.height / base.width            # ~71 px
-    x0, depth = 0.17, 0.66
-    part(sc, base, 1.9, 1.8, 0, hb, x0=x0, side=side, depth=depth, grain=side, max_depth=depth)
+    part(sc, base, 2.82, 2.64, 0, hb, x0=x0, side=side, depth=depth, grain=side, max_depth=depth, split=False)
     # the butcher-block top, overhanging the base a little all round
-    tx0, tx1, ty0, ty1, z0, z1 = 0.1, 0.9, 0.04, 1.96, hb, hb + 8
+    tx0, tx1, ty0, ty1, z0, z1 = 0.2, 2.8, 0.06, 2.94, hb, hb + 9
     L, D = (ty1 - ty0) * TE * 2, (tx1 - tx0) * TE * 2
-    sc.box(tx0, ty0, z0, tx1, ty1, z1, front=butcher_block(int(L), 16, end_grain=True),
-           side=butcher_block(int(D), 16, seed=5, end_grain=True), top=butcher_block(int(L), int(D)))
-    # things on top: a bread board with a loaf, a mixing bowl, a copper pan
-    board = butcher_block(90, 60, seed=9)
-    board = recolour(board, (150, 110, 70), keep_brass=False)
-    sc.quad(board, (0.32, 0.95, z1 + 1.5), (0.32, 0.5, z1 + 1.5), (0.68, 0.95, z1 + 1.5), 1.0)
-    sc.decal(_loaf(), 0.52, 0.72, z1 + 2, 15)
-    sc.decal(_bowl(), 0.45, 1.35, z1, 18)
-    sc.decal(_pan(), 0.55, 1.72, z1, 17)
+    sc.box(tx0, ty0, z0, tx1, ty1, z1, front=butcher_block(int(L) // 2, 16, end_grain=True),
+           side=butcher_block(int(D) // 2, 16, seed=5, end_grain=True), top=butcher_block(int(L) // 2, int(D) // 2))
+    board = recolour(butcher_block(90, 60, seed=9), (150, 110, 70), keep_brass=False)
+    sc.quad(board, (0.7, 2.6, z1 + 1.5), (0.7, 2.0, z1 + 1.5), (1.3, 2.6, z1 + 1.5), 1.0)
+    sc.decal(_loaf(), 1.0, 2.3, z1 + 2, 15)
+    sc.decal(_bowl(), 2.0, 2.2, z1, 18)
+    sc.decal(_pan(), 1.0, 0.8, z1, 17)
+    sc.decal(_bowl(), 2.1, 0.9, z1, 14)
     return sc
 
 

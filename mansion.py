@@ -80,7 +80,7 @@ ROOMS = {
     "drawing_room": R("Drawing Room", "ground", (1, 0), (8, 7), "drawing",
         furn=[("fireplace", 3, 0, "S"), ("armchair", 2, 1, "auto"), ("armchair", 5, 1, "auto"), ("sofa", 0, 5, "E"),
               ("round_table", 6, 4, "S"), ("rug", 3, 3, "S"), ("piano", 6, 0, "S")],
-        wall=[("painting_lady", "N", 1), ("mirror", "W", 0), ("window", "W", 5)], enemies=["ghost"]),
+        wall=[("painting_lady", "N", 1), ("mirror", "W", 0)], enemies=["ghost"]),
     # round: a circle of iron and glass inscribed in the 8x8 grid (see Room.round)
     "conservatory": R("Conservatory", "ground", (0, 0), (8, 8), "glass",
         furn=[("potted_palm", 1, 1, "E"), ("potted_palm", 6, 1, "S"), ("potted_palm", 1, 6, "E"), ("statue", 3, 0, "S"),
@@ -110,7 +110,7 @@ ROOMS = {
     "billiard_room": R("Billiard Room", "ground", (4, 1), (8, 8), "green",
         furn=[("billiard_table", 2, 3, "S"), ("chair", 6, 1, "auto"), ("armchair", 7, 6, "auto"), ("round_table", 0, 0, "S"),
               ("suit_of_armour", 0, 6, "E")],
-        wall=[("painting_landscape", "W", 1), ("window", "N", 6), ("painting", "N", 1)], enemies=["goblin", "skeleton"]),
+        wall=[("painting_landscape", "W", 1), ("painting", "N", 1)], enemies=["goblin", "skeleton"]),
     "ballroom": R("Ballroom", "ground", (0, 2), (9, 9), "ball",
         furn=[("statue", 0, 0, "E"), ("statue", 8, 0, "S"), ("candelabra", 0, 8, "E"), ("candelabra", 8, 8, "S"),
               ("piano", 0, 5, "E"), ("chair", 2, 1, "auto"), ("chair", 6, 1, "auto"), ("harp", 1, 0, "S")],
@@ -124,13 +124,13 @@ ROOMS = {
     "kitchen": R("Kitchen", "ground", (2, 2), (8, 8), "kitchen",
         # the range on the west wall, the dresser on the north wall: well apart, not in each other's way
         furn=[("stairs_down", 6, 0, "S", "cellar_passage"), ("range_cooker", 0, 5, "E"), ("kitchen_island", 3, 3, "S"),
-              ("sink", 0, 1, "E"), ("kitchen_dresser", 1, 0, "S"), ("cauldron", 2, 7, "S"), ("pumpkin", 5, 6, "S"),
+              ("sink", 0, 1, "E"), ("kitchen_dresser", 1, 0, "S"), ("cauldron", 2, 7, "S"), ("pumpkin", 7, 7, "S"),
               ("barrel", 0, 7, "E")],
-        wall=[("window", "N", 5)], enemies=["goblin"]),
+        wall=[], enemies=["goblin"]),
     "scullery": R("Scullery", "ground", (3, 2), (7, 7), "kitchen",
         furn=[("trapdoor", 5, 1, "S", "coal_cellar"), ("sink", 0, 0, "E"), ("washtub", 1, 0, "S"), ("crate", 3, 5, "S"),
               ("crate", 4, 5, "S"), ("barrel", 6, 6, "S")],
-        wall=[("cobweb", "N", 6), ("window", "N", 4)], enemies=["spider"]),
+        wall=[("cobweb", "N", 6)], enemies=["spider"]),
     # ---------------------------------------------------------------- basement
     "cellar_passage": R("Cellar Passage", "basement", (1, 1), (8, 6), "cellar",
         furn=[("stairs_up", 6, 0, "S", "kitchen"), ("barrel", 0, 0, "E"), ("crate", 1, 5, "S"), ("candelabra", 5, 0, "S")],
@@ -172,7 +172,7 @@ ROOMS = {
         wall=[("mirror", "W", 5), ("mirror", "N", 1)], enemies=["skeleton"]),
     "bathroom": R("Bathroom", "first", (0, 1), (7, 7), "bath",
         furn=[("bath", 0, 0, "E"), ("washstand", 3, 0, "S"), ("linen_press", 0, 5, "E"), ("chair", 4, 4, "auto")],
-        wall=[("mirror", "N", 3), ("window", "N", 5)], enemies=["ghost"]),
+        wall=[("mirror", "N", 3)], enemies=["ghost"]),
     "portrait_gallery": R("Portrait Gallery", "first", (2, 1), (9, 5), "drawing",
         furn=[("statue", 4, 4, "S"), ("suit_of_armour", 0, 4, "E"), ("candelabra", 8, 0, "S")],
         wall=[("painting", "N", 1), ("painting_lady", "N", 3), ("painting", "N", 5), ("painting_lady", "N", 7),
@@ -187,7 +187,7 @@ ROOMS = {
     "sewing_room": R("Sewing Room", "first", (0, 2), (7, 7), "nursery",
         furn=[("dummy", 0, 0, "E"), ("sewing_machine", 2, 0, "S"), ("dummy", 5, 0, "S"), ("chest_of_drawers", 0, 5, "E"),
               ("chair", 2, 1, "auto")],
-        wall=[("window", "N", 3)], enemies=["ghost"]),
+        wall=[], enemies=["ghost"]),
     "linen_room": R("Linen Room", "first", (2, 2), (7, 6), "bath",
         furn=[("stairs_up", 4, 0, "S", "servants_quarters"), ("linen_press", 0, 0, "E"), ("trunk", 6, 5, "S"),
               ("chest", 2, 4, "S")],
@@ -210,7 +210,7 @@ ROOMS = {
     "servants_quarters": R("Servants' Quarters", "loft", (2, 1), (8, 7), "loft",
         furn=[("stairs_down", 6, 0, "S", "linen_room"), ("bed", 0, 4, "E"), ("chest_of_drawers", 1, 0, "S"),
               ("washstand", 5, 6, "S"), ("chair", 4, 3, "auto")],
-        wall=[("window", "N", 5)], enemies=["skeleton"]),
+        wall=[], enemies=["skeleton"]),
 }
 
 # (room, side, other room); the other room's door is on the opposite side.
