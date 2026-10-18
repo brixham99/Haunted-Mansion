@@ -416,6 +416,7 @@ def main():
         e.x, e.y = g.px + 0.2, g.py
         g.grace = 0
         g.update(DT, auto=(0, 0))
+        check(G.LIVES == 5 and g.max_lives == 5, f"five hearts at the start (LIVES {G.LIVES})")
         check(g.lives == G.LIVES - 1, f"touching the {e.kind} should cost a life (lives {g.lives})")
         g.lives = 1
         g.invuln = 0

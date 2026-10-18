@@ -47,7 +47,7 @@ SEARCH_TIME = 0.55
 FADE = 0.18                    # each half of the flip-screen fade
 ENTRY_GRACE = 0.9              # s enemies wait when you come into a room
 INVULN = 2.2                   # s after losing a life
-LIVES = 3
+LIVES = 5                  # hearts at the start (each player has 5 in a two-player game too)
 MSG_TIME = 3.2
 # Scoring
 PTS_MOVE = 1                   # per whole second spent actually walking (forwards or back)

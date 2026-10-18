@@ -20,7 +20,7 @@ The game is drawn at 1280 x 800 and the window can be resized. It uses pygame-ce
 - **Space or E** searches the furniture you are facing (wardrobes, bookcases, grandfather clocks, paintings, coffins...) or lifts a rug.
 - **Walk into** chairs, armchairs, chests, crates and the rocking horse to push them. The key might be underneath. Rooms tidy themselves when you leave, so you can never get stuck.
 - **Tab or M** shows the map of the rooms you have explored. **P** pauses. **Esc** goes back to the title screen.
-- Ghosts and bats float through furniture; goblins, spiders, skeletons and the monster walk round it. If one touches you, you lose a life and go back to where you came in. You have three lives.
+- Ghosts and bats float through furniture; goblins, spiders, skeletons and the monster walk round it. If one touches you, you lose a life and go back to where you came in. You have five lives (five hearts each in a two-player game).
 - Once you have the key, get back to the **Entrance Hall** and walk into the front door. Your time is shown at the end; your best time is saved on this computer.
 
 ## Scoring and high scores

@@ -163,6 +163,7 @@ def main():
     # ---- 1. join by discovery, same house, see each other move
     host, cli, games = connect(screen, 104, PORT)
     same_house(host, cli)
+    check(C.COOP_LIVES == G.LIVES == 5, f"two-player hearts match one-player ({C.COOP_LIVES} / {G.LIVES})")
     check(host.lives == cli.lives == C.COOP_LIVES and host.max_lives == cli.max_lives == C.COOP_LIVES,
           f"each player has their own {C.COOP_LIVES} hearts ({host.lives} / {cli.lives})")
     check(host.coop.partner_here() and cli.coop.partner_here(), "both start in the Entrance Hall and see each other")

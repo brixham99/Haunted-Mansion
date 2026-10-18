@@ -33,7 +33,7 @@ import mansion as M
 import net
 from objects import nice
 
-COOP_LIVES = 5
+COOP_LIVES = 5                 # each player's hearts: the same as one-player (game.LIVES)
 HELLO_TIMEOUT_S = 5.0
 
 
