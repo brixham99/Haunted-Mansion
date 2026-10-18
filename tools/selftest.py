@@ -682,6 +682,9 @@ def grand_stairs_checks(g):
           f"the West Corridor has no doors to the Drawing Room or the Dining Room ({sorted(wc_doors)})")
     for rid in ("drawing_room", "dining_room"):
         check(len(h.route("staircase_hall", rid)) > 1, f"the {h.rooms[rid].name} still has a way in")
+    check("S" not in h.rooms["east_corridor"].doors and "N" not in h.rooms["scullery"].doors,
+          "no door between the East Corridor and the Scullery")
+    check(len(h.route("staircase_hall", "scullery")) > 1, "the Scullery still has a way in (Kitchen, Coal Cellar)")
     print(f"grand stairs: flight {len(hall.flight)} tiles up to {hall.STAIR_TOP} px, well {len(land.well)} tiles, "
           f"{len(grand.layers(g, hall))}+{len(grand.layers(g, land))} layers")
 

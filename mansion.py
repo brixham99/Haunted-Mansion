@@ -235,7 +235,7 @@ DOORS = [
     ("conservatory", "S", "music_room"), ("study", "E", "library"), ("library", "S", "billiard_room"),
     ("staircase_hall", "W", "west_corridor", {"at": 5, "at_other": 3}), ("staircase_hall", "E", "east_corridor"), ("staircase_hall", "S", "kitchen"),
     ("west_corridor", "W", "music_room", {"at": 3, "at_other": 4}),
-    ("east_corridor", "E", "billiard_room"), ("east_corridor", "S", "scullery"),
+    ("east_corridor", "E", "billiard_room"),
     ("ballroom", "N", "music_room"), ("ballroom", "E", "dining_room"), ("dining_room", "E", "kitchen"),
     ("kitchen", "E", "scullery"),
     ("cellar_passage", "N", "wine_cellar"), ("cellar_passage", "W", "laundry"), ("cellar_passage", "E", "boiler_room"),
