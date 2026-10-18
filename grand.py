@@ -50,6 +50,10 @@ WELL_DEPTH = 260
 
 
 def _P(g, r):
+    """Projection in the staircase's own frame (mirrored across the diagonal
+    for a swapped spec: still exactly isometric, the visible faces swap)."""
+    if r.swap:
+        return lambda x, y, z=0.0: g.P(y, x, z, r)
     return lambda x, y, z=0.0: g.P(x, y, z, r)
 
 
@@ -70,12 +74,23 @@ def _build(g, r):
         draw(scratch)
         rect = scratch.get_bounding_rect(min_alpha=1)
         if rect.w and rect.h:
-            out.append((box, scratch.subsurface(rect).copy(), (rect.x, rect.y)))
+            out.append((r.local_box(box), scratch.subsurface(rect).copy(), (rect.x, rect.y)))
 
     gd = r.grand
     if gd["kind"] == "stairs":
+        P = _P(g, r)
+        mask = pygame.Surface(scratch.get_size(), pygame.SRCALPHA)
         for j in range(gd["y1"]):
-            grab((gd["x0"], j, gd["x1"], j + 1), lambda s, j=j: _flight_row(g, r, s, j))
+            def row(s, j=j):
+                _flight_row(g, r, s, j)
+                # nothing above the ceiling line: the flight passes up through the
+                # ceiling there (cut to the column over the row, up to WALL_H)
+                a, b = gd["x0"] - 0.4, gd["x1"] + 0.4
+                mask.fill((0, 0, 0, 0))
+                pts = [P(u, v, z) for u in (a, b) for v in (j, j + 1) for z in (-40, WALL_H)]
+                pygame.draw.polygon(mask, (255, 255, 255, 255), _hull(pts))
+                s.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+            grab((gd["x0"], j, gd["x1"], j + 1), row)
     else:
         for box, fn in _gallery_parts(g, r):
             grab(box, fn)
@@ -83,6 +98,24 @@ def _build(g, r):
 
 
 # ------------------------------------------------------------------ helpers
+def _hull(pts):
+    """Convex hull (monotone chain) of screen points."""
+    pts = sorted(set((round(x, 3), round(y, 3)) for x, y in pts))
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    lo, hi = [], []
+    for p in pts:
+        while len(lo) >= 2 and cross(lo[-2], lo[-1], p) <= 0:
+            lo.pop()
+        lo.append(p)
+    for p in reversed(pts):
+        while len(hi) >= 2 and cross(hi[-2], hi[-1], p) <= 0:
+            hi.pop()
+        hi.append(p)
+    return lo[:-1] + hi[:-1]
+
+
 def _quad(s, col, pts, edge=None):
     pygame.draw.polygon(s, col, pts)
     if edge is not None:
@@ -203,24 +236,34 @@ def _flight_row(g, r, s, j):
 
 
 def draw_wall_opening(g, s, r):
-    """Hall: the flight goes on up through a dark opening in the back wall;
-    the landing: nothing on the walls."""
+    """Hall: the flight's top step is level with the top of the wall, so it
+    climbs on through a dark opening in the back wall and the ceiling over
+    it (a dark hole in the ceiling plane, trimmed in oak). The landing:
+    nothing on the walls."""
     gd = r.grand
     if gd["kind"] != "stairs":
         return
     P = _P(g, r)
     x0, x1 = gd["x0"], gd["x1"]
-    top = r.STAIR_TOP
-    _quad(s, (10, 7, 10), [P(x0, 0, top), P(x1, 0, top), P(x1, 0, WALL_H - 6), P(x0, 0, WALL_H - 6)])
-    for k in range(1, 5):        # faint steps going on up into the dark
-        z = top + k * 13
-        c = art.shade((60, 40, 26), 0.8 - k * 0.14)
+    top = WALL_H
+    low = top - 120
+    # the opening in the back wall
+    _quad(s, (9, 6, 9), [P(x0, 0, low), P(x1, 0, low), P(x1, 0, top), P(x0, 0, top)])
+    # the hole in the ceiling above the top of the flight, going up into the dark
+    deep = 1.6
+    _quad(s, (6, 4, 7), [P(x0, 0, top), P(x1, 0, top), P(x1, deep, top), P(x0, deep, top)])
+    for k in range(1, 4):         # the flight going on up, out of sight
+        z = top + k * 18
+        c = art.shade(OAK_DARK, 0.75 - k * 0.18)
         pygame.draw.line(s, c, P(x0 + 0.05, 0, z), P(x1 - 0.05, 0, z), 2)
-        pygame.draw.line(s, art.shade(RUNNER, 0.7 - k * 0.12), P(x0 + 0.34, 0, z), P(x1 - 0.34, 0, z), 2)
-    # a dark oak architrave round it
+        pygame.draw.line(s, art.shade(RUNNER, 0.55 - k * 0.14), P(x0 + 0.34, 0, z), P(x1 - 0.34, 0, z), 2)
+    # dark oak architrave up the sides of the wall opening, and a trim round the ceiling hole
     for xa in (x0, x1):
-        _quad(s, OAK, [P(xa - 0.08, 0, top - 10), P(xa + 0.08, 0, top - 10), P(xa + 0.08, 0, WALL_H - 6), P(xa - 0.08, 0, WALL_H - 6)])
-    _quad(s, OAK, [P(x0 - 0.08, 0, WALL_H - 18), P(x1 + 0.08, 0, WALL_H - 18), P(x1 + 0.08, 0, WALL_H - 6), P(x0 - 0.08, 0, WALL_H - 6)])
+        _quad(s, OAK, [P(xa - 0.08, 0, low - 8), P(xa + 0.08, 0, low - 8), P(xa + 0.08, 0, top), P(xa - 0.08, 0, top)])
+    trim = art.shade(OAK, 1.15)
+    pygame.draw.line(s, trim, P(x0, deep, top), P(x1, deep, top), 4)
+    pygame.draw.line(s, trim, P(x1, 0, top), P(x1, deep, top), 4)
+    pygame.draw.line(s, art.shade(OAK, 0.7), P(x0, 0, top), P(x0, deep, top), 3)
 
 
 # ------------------------------------------------------------------ the gallery
@@ -229,7 +272,10 @@ def _gallery_parts(g, r):
     gd = r.grand
     x0, x1, y0, y1 = gd["x0"], gd["x1"], gd["y0"], gd["y1"]
     link = r.grand_link()
-    gap = set(range(link.x, link.x + link.gx)) if link is not None else set()
+    if link is not None:
+        lx, ly = r.local(link.x, link.y)
+        lgx = link.gy if r.swap else link.gx
+    gap = set(range(lx, lx + lgx)) if link is not None else set()
     inset = 0.08
     parts = []
 
@@ -288,9 +334,10 @@ def draw_background(g, s, r):
     _quad(tmp, art.shade(OAK, 0.5), [P(x0, y0, 0), P(x0, y1, 0), P(x0, y1, -14), P(x0, y0, -14)])
     link = r.grand_link()
     if link is not None:            # the top of the flight, coming up into the gap
-        a0, a1 = link.x, link.x + link.gx
+        lx, _ = r.local(link.x, link.y)
+        a0, a1 = lx, lx + (link.gy if r.swap else link.gx)
         ra, rb = a0 + 0.34, a1 - 0.34
-        rise = r.STAIR_TOP / 12 if hasattr(r, "STAIR_TOP") else 12.5
+        rise = 23.0                 # the hall flight's steps (WALL_H over 10)
         for i in range(10):
             ya, yb = y0 + i * 0.5, y0 + i * 0.5 + 0.5
             z, zn = -rise * (i + 1), -rise * (i + 2)
@@ -318,8 +365,9 @@ def figure_box(r, x, y, rad):
     row under their feet: sorted just in front of it (that row and the ones
     behind are drawn first), behind the lower rows nearer the viewer."""
     if r.on_flight(x, y):
-        j = math.floor(y)
-        return (x - rad, j + 1, x + rad, j + 1 + 1e-3)
+        u, v = r.local(x, y)
+        j = math.floor(v)
+        return r.local_box((u - rad, j + 1, u + rad, j + 1 + 1e-3))
     return (x - rad, y - rad, x + rad, y + rad)
 
 

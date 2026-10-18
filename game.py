@@ -41,7 +41,7 @@ WIN_W, WIN_H = 1280, 800
 HUD_H = 56
 HW, HH = TILE_W // 2, TILE_H // 2
 SLAB = 18                      # floor thickness shown along the open front edges
-GRAND_TOP_Y = 0.9               # up the grand staircase this far: on to the landing
+GRAND_TOP_Y = 1.0               # up the grand staircase this far: on to the landing
 PLAYER_R = 0.24                # half-size of the player's collision box (tiles)
 PLAYER_SPEED = 3.0             # tiles per second
 # Furniture shadows: only legged pieces get one, a tight soft patch inset
@@ -986,11 +986,12 @@ class Game:
             return None
         g = rm.grand
         r = PLAYER_R
+        x, y = rm.local(x, y)            # in the flight's own frame
         if y - r >= g["y1"] + 0.04:
             return None
         for fx in (g["x0"], g["x1"]):
-            if x - r < fx < x + r:
-                return (g["x0"], min(g["y1"] - 1, max(0, math.floor(y))))
+            if x - r < fx < x + r:      # the tile on the far side of the banister (so a snap lands flush)
+                return rm.local(fx if x < fx else fx - 1, min(g["y1"] - 1, max(0, math.floor(y))))
         return None
 
     def box_hits(self, x, y, solid):
@@ -1433,7 +1434,7 @@ class Game:
         trig = r.trigger_cells().get((math.floor(self.px), math.floor(self.py)))
         if trig is not None:
             self.take_link(trig)
-        elif r.on_flight(self.px, self.py) and self.py < GRAND_TOP_Y:   # at the top of the grand staircase
+        elif r.on_flight(self.px, self.py) and r.local(self.px, self.py)[1] < GRAND_TOP_Y:   # at the top of the grand staircase
             self.take_link(r.grand_link())
 
     def take_link(self, obj):

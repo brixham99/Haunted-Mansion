@@ -28,7 +28,7 @@ import math
 import random
 from collections import deque
 
-from objects import T, TILE_H, TILE_W, WALL_MOUNT, WALL_MOUNT_DEFAULT, footprint
+from objects import WALL_H, T, TILE_H, TILE_W, WALL_MOUNT, WALL_MOUNT_DEFAULT, footprint
 
 FLOORS = ("basement", "ground", "first", "loft")
 FLOOR_NAMES = {"basement": "Basement", "ground": "Ground Floor", "first": "First Floor", "loft": "Loft"}
@@ -68,7 +68,9 @@ def R(name, floor, map_pos, size, style, furn=(), wall=(), enemies=(), shape="sq
     flight between the banisters x0..x1 rising from its foot (y1) to the back
     wall (y 0), walked up by the player (Room.floor_z); dict(kind="well", x0,
     x1, y0, y1): the open stairwell in a gallery floor, banistered all round
-    but for the gap where the room's stairs_down arrives."""
+    but for the gap where the room's stairs_down arrives. swap=True: the
+    numbers are in the frame mirrored across the diagonal (x <-> y), so the
+    flight rises to the west wall instead (Room.local)."""
     return dict(name=name, floor=floor, map=map_pos, size=size, style=style,
                 furn=list(furn), wall=list(wall), enemies=list(enemies), shape=shape, safe=safe, grand=grand)
 
@@ -95,15 +97,17 @@ ROOMS = {
         furn=[("piano", 0, 0, "E"), ("harp", 6, 0, "S"), ("chair", 2, 3, "auto"), ("chair", 5, 3, "auto"), ("candelabra", 0, 5, "S")],
         wall=[("painting_landscape", "N", 1), ("painting_lady", "W", 3)], enemies=["ghost"]),
     "west_corridor": R("West Corridor", "ground", (1, 1), (9, 4), "wood",
-        furn=[("suit_of_armour", 1, 0, "S"), ("suit_of_armour", 6, 0, "S"), ("chair", 7, 3, "auto")],
+        # its doorways sit one tile south of centre, in line with the hall's door (beside the staircase)
+        furn=[("suit_of_armour", 1, 0, "S"), ("suit_of_armour", 6, 0, "S"), ("chair", 8, 0, "auto")],
         wall=[("painting", "N", 7), ("painting_lady", "N", 0)], enemies=["goblin"]),
     "staircase_hall": R("Staircase Hall", "ground", (2, 1), (8, 8), "hall",
-        # the grand staircase: a 2-tile flight up the middle to the back wall; its
+        # the grand staircase: a 2-tile flight from the middle of the room up to the
+        # top of the west wall (beside the West Corridor door, on its right); its
         # stairs_up link sits at the foot of the flight (you go up from the top)
-        furn=[("stairs_up", 3, 4, "S", "landing"), ("grandfather_clock", 0, 0, "S"), ("statue", 0, 7, "E"),
-              ("candelabra", 0, 1, "E"), ("potted_palm", 7, 7, "S")],
-        wall=[("painting", "W", 5), ("painting_landscape", "N", 1)], enemies=["ghost"],
-        grand=dict(kind="stairs", x0=3, x1=5, y1=6)),
+        furn=[("stairs_up", 3, 1, "E", "landing"), ("grandfather_clock", 0, 0, "S"), ("statue", 0, 7, "E"),
+              ("candelabra", 7, 0, "S"), ("potted_palm", 7, 7, "S")],
+        wall=[("painting", "W", 7), ("painting_landscape", "N", 5)], enemies=["ghost"],
+        grand=dict(kind="stairs", swap=True, x0=1, x1=3, y1=5)),
     "east_corridor": R("East Corridor", "ground", (3, 1), (9, 4), "wood",
         furn=[("suit_of_armour", 7, 0, "S"), ("potted_palm", 0, 0, "S"), ("round_table", 1, 3, "S"), ("chair", 6, 3, "auto")],
         wall=[("painting", "N", 2), ("painting_lady", "N", 5), ("cobweb", "N", 8)], enemies=["skeleton"]),
@@ -164,10 +168,10 @@ ROOMS = {
     # ------------------------------------------------------------- first floor
     "landing": R("Landing", "first", (1, 1), (8, 8), "landing",
         # a gallery round the open stairwell; the stairs come up through the gap on its north side
-        furn=[("stairs_down", 3, 2, "N", "staircase_hall"), ("grandfather_clock", 0, 0, "E"),
+        furn=[("stairs_down", 2, 3, "W", "staircase_hall"), ("grandfather_clock", 0, 0, "E"),
               ("statue", 0, 7, "E"), ("potted_palm", 7, 7, "S")],
         wall=[("painting", "N", 1), ("painting_lady", "W", 6)], enemies=["ghost"],
-        grand=dict(kind="well", x0=2, x1=6, y0=2, y1=6)),
+        grand=dict(kind="well", swap=True, x0=2, x1=6, y0=2, y1=6)),
     "master_bedroom": R("Master Bedroom", "first", (1, 0), (9, 8), "bedroom",
         furn=[("bed", 1, 0, "S"), ("chest_of_drawers", 5, 0, "S"), ("wardrobe", 0, 6, "E"), ("armchair", 7, 5, "auto"),
               ("candelabra", 8, 0, "S")],
@@ -225,11 +229,11 @@ ROOMS = {
 
 # (room, side, other room); the other room's door is on the opposite side.
 DOORS = [
-    ("entrance_hall", "S", "staircase_hall", {"at_other": 6}), ("entrance_hall", "W", "drawing_room"), ("entrance_hall", "E", "study"),
+    ("entrance_hall", "S", "staircase_hall"), ("entrance_hall", "W", "drawing_room"), ("entrance_hall", "E", "study"),
     ("drawing_room", "W", "conservatory"), ("drawing_room", "S", "west_corridor"),
     ("conservatory", "S", "music_room"), ("study", "E", "library"), ("library", "S", "billiard_room"),
-    ("staircase_hall", "W", "west_corridor"), ("staircase_hall", "E", "east_corridor"), ("staircase_hall", "S", "kitchen"),
-    ("west_corridor", "W", "music_room"), ("west_corridor", "S", "dining_room"),
+    ("staircase_hall", "W", "west_corridor", {"at": 4, "at_other": 2}), ("staircase_hall", "E", "east_corridor"), ("staircase_hall", "S", "kitchen"),
+    ("west_corridor", "W", "music_room", {"at": 2, "at_other": 3}), ("west_corridor", "S", "dining_room"),
     ("east_corridor", "E", "billiard_room"), ("east_corridor", "S", "scullery"),
     ("ballroom", "N", "music_room"), ("ballroom", "E", "dining_room"), ("dining_room", "E", "kitchen"),
     ("kitchen", "E", "scullery"),
@@ -330,10 +334,14 @@ class Room:
         g = self.grand or {}
         self.flight = set()     # the grand staircase's tiles (walked on by the player only)
         self.well = set()       # the open stairwell (a drop: nobody walks there)
+        # swap: the spec is in a frame mirrored across the diagonal (x <-> y), so
+        # a flight written as rising to the north wall rises to the west wall
+        self.swap = bool(g.get("swap"))
+        L = self.local
         if g.get("kind") == "stairs":
-            self.flight = {(x, y) for x in range(g["x0"], g["x1"]) for y in range(0, g["y1"])}
+            self.flight = {L(x, y) for x in range(g["x0"], g["x1"]) for y in range(0, g["y1"])}
         elif g.get("kind") == "well":
-            self.well = {(x, y) for x in range(g["x0"], g["x1"]) for y in range(g["y0"], g["y1"])}
+            self.well = {L(x, y) for x in range(g["x0"], g["x1"]) for y in range(g["y0"], g["y1"])}
         self.enemies = [] if self.safe else list(spec["enemies"])
 
     def aim_seat(self, o):
@@ -440,6 +448,13 @@ class Room:
             out.pop(c, None)
         return out
 
+    def local(self, x, y):
+        """World <-> the grand staircase's own frame (its own inverse)."""
+        return (y, x) if self.swap else (x, y)
+
+    def local_box(self, b):
+        return (b[1], b[0], b[3], b[2]) + tuple(b[4:]) if self.swap else b
+
     def grand_boxes(self):
         """(x0, y0, x1, y1, h) blocks the grand staircase stands up in front of
         the floor (Mansion.in_view): each row of the flight with its
@@ -448,20 +463,25 @@ class Room:
         if not g:
             return []
         if g["kind"] == "stairs":
-            return [(g["x0"], j, g["x1"], j + 1, self.floor_z(g["x0"], j) + 80) for j in range(g["y1"])]
+            return [self.local_box((g["x0"], j, g["x1"], j + 1, self.floor_z(*self.local(g["x0"], j)) + 80)) for j in range(g["y1"])]
         x0, x1, y0, y1 = g["x0"], g["x1"], g["y0"], g["y1"]
-        return [(x0, y0, x1, y0 + 0.1, 112), (x0, y1 - 0.1, x1, y1, 112), (x0, y0, x0 + 0.1, y1, 112), (x1 - 0.1, y0, x1, y1, 112)]
+        return [self.local_box(b) for b in
+                [(x0, y0, x1, y0 + 0.1, 112), (x0, y1 - 0.1, x1, y1, 112), (x0, y0, x0 + 0.1, y1, 112), (x1 - 0.1, y0, x1, y1, 112)]]
 
-    STAIR_TOP = 150      # px: height of the grand flight's top step (at the back wall)
+    STAIR_TOP = WALL_H   # px: the grand flight's top step is level with the top of the wall
 
     def on_flight(self, x, y):
+        if not self.flight:
+            return False
         g = self.grand
-        return bool(self.flight) and g["x0"] <= x < g["x1"] and y < g["y1"]
+        u, v = self.local(x, y)
+        return g["x0"] <= u < g["x1"] and v < g["y1"]
 
     def floor_z(self, x, y):
         """Height of the floor under (x, y): up the grand staircase's steps."""
         if not self.on_flight(x, y):
             return 0.0
+        x, y = self.local(x, y)
         y1 = self.grand["y1"]
         rise = self.STAIR_TOP / (2 * y1)
         return max(0.0, min(self.STAIR_TOP, self.STAIR_TOP * (y1 - y) / y1 + rise / 2))
