@@ -446,7 +446,7 @@ class HostLobby:
                 theirs = next(c for c in G.CHAR_ORDER if c != mine)
                 seed = self.g.coop_seed if self.g.coop_seed is not None else random.randrange(1_000_000)
                 self.link.send({"t": "welcome", "v": net.PROTOCOL, "seed": seed, "host": mine, "you": theirs,
-                                "name": net.host_label()})
+                                "name": net.host_label(), "hidden": bool(self.g.key_hidden)})
                 self.close(keep_link=True)
                 self.g.start_coop("host", self.link, seed, mine, theirs)
                 return
@@ -546,6 +546,7 @@ class JoinLobby:
         for msg in self.link.poll():
             if msg.get("t") == "welcome" and msg.get("v") == net.PROTOCOL:
                 self.close(keep_link=True)
+                self.g.key_hidden = bool(msg.get("hidden", False))   # the host decides where keys go
                 self.g.start_coop("client", self.link, int(msg["seed"]), msg["you"], msg["host"])
                 return
             if msg.get("t") == "refuse":

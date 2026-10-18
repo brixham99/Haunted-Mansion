@@ -27,11 +27,15 @@ from __future__ import annotations
 import random
 from collections import deque
 
-from objects import T, WALL_MOUNT, WALL_MOUNT_DEFAULT, footprint
+from objects import T, TILE_H, TILE_W, WALL_MOUNT, WALL_MOUNT_DEFAULT, footprint
 
 FLOORS = ("basement", "ground", "first", "loft")
 FLOOR_NAMES = {"basement": "Basement", "ground": "Ground Floor", "first": "First Floor", "loft": "Loft"}
 START_ROOM = "entrance_hall"
+# Where the key goes. False (for now): always out in the open on a floor tile
+# you can see and reach, in a random room. True: the original game, where it
+# is usually hidden inside, behind or under something (see place_key).
+KEY_HIDDEN = False
 DOOR_W = 2
 
 # floor: boards | marble | flagstone | carpet | tiles | planks ; wall: panel | damask | stripe | brick | stone | plaster | beams
@@ -624,9 +628,53 @@ class Mansion:
                 out.append((r.id, "open", c))
         return out
 
-    def place_key(self, rng: random.Random):
-        """Random, always-obtainable spot: about half inside/behind things,
-        a third under something you can move, the rest out in the open."""
+    def in_view(self, room: Room, cell, margin=10):
+        """A key on this floor tile isn't hidden behind furniture from the
+        camera: no object drawn in front of it overlaps the key on screen
+        (with a few pixels to spare). Pushable things count where they start
+        (rooms tidy themselves when you come in)."""
+        hw, hh = TILE_W / 2, TILE_H / 2
+        cx, cy = cell
+        kx, ky = cx + 0.5, cy + 0.5
+        sx, sy = (kx - ky) * hw, (kx + ky) * hh
+        key = (sx - 16 - margin, sy - 44 - margin, sx + 16 + margin, sy + 4)
+        for o in room.objs:
+            h = o.t.get("h", 0)
+            if o.t["kind"] == "flat" or h <= 0:
+                continue
+            x0, y0, x1, y1 = o.x, o.y, o.x + o.gx, o.y + o.gy
+            if x1 <= cx or y1 <= cy:              # wholly behind the key's tile: drawn first
+                continue
+            if not (x0 >= cx + 1 or y0 >= cy + 1):
+                continue                          # (the tile itself: solid, never chosen)
+            box = ((x0 - y1) * hw, (x0 + y0) * hh - h, (x1 - y0) * hw, (x1 + y1) * hh)
+            if box[0] < key[2] and key[0] < box[2] and box[1] < key[3] and key[1] < box[3]:
+                return False
+        return True
+
+    def open_places(self):
+        """Every floor tile the key may lie on when it isn't hidden: open
+        floor (not a rug, doorway, stair end or a seat at a table) that you
+        can reach from a way in, and that no furniture hides from view."""
+        if "_open" not in self.__dict__:
+            self._open = [p for p in self.hiding_places() if p[1] == "open" and self.obtainable(p)
+                          and self.in_view(self.rooms[p[0]], p[2])]
+        return self._open
+
+    def place_key(self, rng: random.Random, hidden=None):
+        """Where the key goes this game. Not hidden (KEY_HIDDEN False, for
+        now): a random room, then a random visible, reachable floor tile in
+        it. Hidden: a random, always-obtainable spot, about half inside or
+        behind things, a fifth under something you can move, some under rugs
+        and the rest out in the open."""
+        if hidden is None:
+            hidden = KEY_HIDDEN
+        if not hidden:
+            by_room = {}
+            for p in self.open_places():
+                by_room.setdefault(p[0], []).append(p)
+            rid = rng.choice(sorted(by_room))
+            return rng.choice(by_room[rid])
         if "_places" not in self.__dict__:
             self._places = [p for p in self.hiding_places() if self.obtainable(p)]
         places = self._places

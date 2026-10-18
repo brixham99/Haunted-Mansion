@@ -13,8 +13,12 @@
 4. Autoplay, using the real game code and real movement/collision:
    a full tour that walks into every room (enemies on, invulnerable, to
    exercise their AI), then finds the key and escapes; then many more games
-   that go straight to the key (wherever it is hidden: searched, pushed,
-   under a rug or in the open) and out of the front door.
+   that go straight to the key and out of the front door, first with the
+   key out in the open (the setting for now), then hidden (KEY_HIDDEN:
+   searched, pushed, under a rug or in the open), and one game for every
+   hiding place.
+3b. With the key in the open it is always on a reachable floor tile that
+   no furniture hides from the camera, and searching finds nothing.
 """
 import argparse
 import math
@@ -262,11 +266,25 @@ def data_checks():
     print(f"hiding places {len(places)}, obtainable {len(ok)}: {kinds}")
     picked = {}
     for seed in range(500):
-        p = house.place_key(random.Random(seed))
+        p = house.place_key(random.Random(seed), hidden=True)
         if not check(house.obtainable(p), f"seed {seed}: place_key chose an unobtainable spot {p}"):
             break
         picked[p[1]] = picked.get(p[1], 0) + 1
-    print(f"place_key over 500 seeds: {picked}")
+    print(f"place_key (hidden mode) over 500 seeds: {picked}")
+    # the key out in the open (KEY_HIDDEN False, for now): always a visible, reachable floor tile
+    check(M.KEY_HIDDEN is False, "the key is out in the open for now (KEY_HIDDEN False)")
+    opens = set(house.open_places())
+    rooms = set()
+    for seed in range(500):
+        p = house.place_key(random.Random(seed))
+        r = house.rooms[p[0]]
+        ok = (p[1] == "open" and p in opens and house.obtainable(p) and house.in_view(r, p[2])
+              and tuple(p[2]) in r.free_floor() and p[0] != M.START_ROOM)
+        if not check(ok, f"seed {seed}: open key on a hidden or unreachable tile {p}"):
+            break
+        rooms.add(p[0])
+    check(len(rooms) >= 30, f"open keys turn up all over the house ({len(rooms)} rooms in 500 games)")
+    print(f"open key: {len(opens)} visible floor tiles; 500 seeds used {len(rooms)} rooms")
     return house
 
 
@@ -426,22 +444,48 @@ def main():
         g.update(DT, auto=(0, 0))
         check(g.mode == "end" and g.lost, "last life lost should end the game")
         g.god = True
-    # ---- key games: straight to the key and out, no enemies
+    # ---- key games: straight to the key and out, no enemies (key in the open, then hidden mode)
     g.enemies_on = False
-    kinds = {}
     n_games = 10 if args.quick else args.games
-    for seed in range(100, 100 + n_games):
-        g.new_game(seed)
-        g.mode = "play"
-        pilot = Pilot(g)
-        try:
-            got = pilot.get_key() and pilot.escape()
-        except Stuck as e:
-            check(False, f"seed {seed}: {e}")
-            got = False
-        k = g.key_place[1]
-        kinds[k] = kinds.get(k, 0) + (1 if got else 0)
-    print(f"key games won: {sum(kinds.values())}/{n_games} by hiding kind {kinds}")
+    for hidden in (False, True):
+        g.key_hidden = hidden
+        kinds = {}
+        for seed in range(100, 100 + n_games):
+            g.new_game(seed)
+            g.mode = "play"
+            check(hidden or (g.key_place[1] == "open" and g.key_state == "revealed"),
+                  f"seed {seed}: the key starts out in the open ({g.key_place})")
+            pilot = Pilot(g)
+            try:
+                got = pilot.get_key() and pilot.escape()
+            except Stuck as e:
+                check(False, f"seed {seed}: {e}")
+                got = False
+            k = g.key_place[1]
+            kinds[k] = kinds.get(k, 0) + (1 if got else 0)
+        print(f"key games won ({'hidden' if hidden else 'open'} key): {sum(kinds.values())}/{n_games} by kind {kinds}")
+    g.key_hidden = M.KEY_HIDDEN
+    # ---- with the key in the open, searching, lifting and pushing still work but never find it
+    g.new_game(77)
+    g.mode = "play"
+    n_s = 0
+    for r in g.house.rooms.values():
+        g.room = r
+        for o in r.objs + r.walls:
+            if o.t.get("search"):
+                g.finish_search(o)
+                n_s += 1
+            elif o.t.get("lift"):
+                g.room = r
+                o.lifted = True
+        r.reset_pushables()
+    check(g.key_state == "revealed" and g.key_place[1] == "open" and g.score == 0,
+          f"searching all {n_s} hiding places finds nothing when the key is in the open ({g.key_state})")
+    check(any(o.searched for r in g.house.rooms.values() for o in r.objs + r.walls), "and they still get searched")
+    for r in g.house.rooms.values():
+        for o in r.objs:
+            o.lifted = False
+            o.searched = False
     # ---- every single hiding place, one by one (the slow, thorough part)
     if not args.quick:
         house = M.Mansion()

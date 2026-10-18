@@ -80,8 +80,9 @@ class DuoPilot(S.Pilot):
         time.sleep(0.002)
 
 
-def connect(screen, seed, port, host_char=0, via_scan=True):
+def connect(screen, seed, port, host_char=0, via_scan=True, hidden=False):
     host = G.Game(screen, seed=1, enemies=True, god=True, save=False, title=True, online=False)   # god: the pilot can't dodge
+    host.key_hidden = hidden                # the host decides where the key goes
     cli = G.Game(screen, seed=2, enemies=True, god=False, save=False, title=True, online=False)
     host.net_port = port
     host.coop_seed = seed
@@ -109,6 +110,8 @@ def connect(screen, seed, port, host_char=0, via_scan=True):
 def same_house(host, cli):
     check(host.seed == cli.seed, f"same seed ({host.seed} / {cli.seed})")
     check(host.key_place == cli.key_place, f"same key place {host.key_place} / {cli.key_place}")
+    check(host.key_hidden == cli.key_hidden and (host.key_hidden or host.key_place[1] == "open"),
+          f"the joiner follows the host's key setting (hidden {host.key_hidden} / {cli.key_hidden}, {host.key_place[1]})")
     a = {(r.id, o.id, o.type, o.x, o.y) for r in host.house.rooms.values() for o in r.objs}
     b = {(r.id, o.id, o.type, o.x, o.y) for r in cli.house.rooms.values() for o in r.objs}
     check(a == b, "same furniture in every room")
@@ -276,7 +279,7 @@ def main():
 
     # ---- 2. other hiding kinds, typed address, Holly hosting; deaths and watching
     for seed in (102, 106, 101):
-        host, cli, games = connect(screen, seed, PORT, host_char=1, via_scan=False)
+        host, cli, games = connect(screen, seed, PORT, host_char=1, via_scan=False, hidden=True)   # hidden-key mode
         check(host.character == "holly" and cli.character == "archie", "Holly hosts, Archie joins")
         same_house(host, cli)
         pc = DuoPilot(cli, host)
@@ -370,6 +373,7 @@ def main():
     check(cli.coop is None and cli.mode == "play", "host leaves: the joiner carries on alone")
     check("Carrying on alone" in (cli.msg or ""), f"and is told ({cli.msg!r})")
     pc = S.Pilot(cli)
+    cli.god = True                           # (the pilot can't dodge)
     try:
         ok = pc.get_key() and pc.escape()
         check(ok and cli.won, "the joiner can still find the key and escape on their own")

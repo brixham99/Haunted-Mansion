@@ -274,6 +274,7 @@ class Game:
         self.title_opt = 0                 # 0 play alone, 1 host, 2 join
         self.net_port = net.GAME_PORT
         self.coop_seed = None              # testing: the house a hosted game uses
+        self.key_hidden = M.KEY_HIDDEN     # hide the key in/behind/under things (a two-player host decides)
         self.killer = None
         self.bg_cache = {}
         self.dark_cache = {}
@@ -311,7 +312,7 @@ class Game:
         self.seed = seed
         self.rng = random.Random(seed)
         self.house = M.Mansion()
-        self.key_place = self.house.place_key(self.rng)
+        self.key_place = self.house.place_key(self.rng, hidden=self.key_hidden)
         self.key_state = "hidden"         # hidden | revealed | carried
         self.key_pos = None               # floor position once revealed
         if self.key_place[1] == "open":
@@ -1608,6 +1609,12 @@ class Game:
         lr = self.player_light.get_width() // 2
         if self.out is None:
             dark.blit(self.player_light, (lx - lr, ly - lr), special_flags=pygame.BLEND_RGBA_SUB)
+        if key_here:   # the key catches the light: a small pool round it, so it shows even in a dark corner
+            if "key_light" not in self.glow_cache:
+                self.glow_cache["key_light"] = pygame.transform.smoothscale(self.player_light, (220, 220))
+            kl = self.glow_cache["key_light"]
+            kx, ky = self.P(*self.key_pos, 14)
+            dark.blit(kl, (kx - 110, ky - 110), special_flags=pygame.BLEND_RGBA_SUB)
         if self.coop is not None and self.coop.partner_here():   # the other player carries a light too
             qx, qy = self.P(self.coop.partner.x, self.coop.partner.y, 70)
             dark.blit(self.player_light, (qx - lr, qy - lr), special_flags=pygame.BLEND_RGBA_SUB)
@@ -1626,9 +1633,17 @@ class Game:
                 gx, gy = self.P(e.x, e.y, e.z0 + 70 + 8 * math.sin(e.phase * 2))
                 s.blit(gs, (gx - 70, gy - 70), special_flags=pygame.BLEND_RGB_ADD)
         if key_here:
-            gs = self.glow_sprite((255, 220, 110), 40)
+            gs = self.glow_sprite((255, 220, 110), 52)
             kx, ky = self.P(*self.key_pos, 20)
-            s.blit(gs, (kx - 40, ky - 40), special_flags=pygame.BLEND_RGB_ADD)
+            s.blit(gs, (kx - 52, ky - 52), special_flags=pygame.BLEND_RGB_ADD)
+            tw = max(0.0, math.sin(self.time * 4.0))   # a twinkle on the key, to catch the eye
+            if tw > 0.05:
+                sx, sy = self.P(*self.key_pos, 34)
+                sx, sy = round(sx + 7), round(sy - 2)
+                n = int(5 + 9 * tw)
+                c = (int(200 * tw), int(180 * tw), int(110 * tw))
+                pygame.draw.line(s, c, (sx - n, sy), (sx + n, sy), 2)
+                pygame.draw.line(s, c, (sx, sy - n), (sx, sy + n), 2)
         self.draw_popups()
         self.draw_hud()
         if self.mode == "watch" and self.coop is not None:
@@ -2211,6 +2226,8 @@ def parse_args(argv):
     p.add_argument("--facing", default=None, choices=("N", "E", "S", "W"))
     p.add_argument("--sim", type=float, default=1.2, help="debug: seconds to simulate before the screenshot")
     p.add_argument("--offline", action="store_true", help="no online high scores (local file only)")
+    p.add_argument("--hidden-key", action="store_true",
+                   help="hide the key inside, behind or under things (the harder game; off for now)")
     p.add_argument("--port", type=int, default=net.GAME_PORT, help="TCP port for hosting a two-player game")
     p.add_argument("--scores-file", default=None, help="debug: high score file instead of ~/.haunted_mansion/scores.json")
     p.add_argument("--show-top10", action="store_true", help="debug: keep the Top 10 on the title screen")
@@ -2237,6 +2254,9 @@ def main(argv=None):
                 online=not (headless or args.offline), scores_file=args.scores_file)
     game.show_top10 = args.show_top10
     game.net_port = args.port
+    if args.hidden_key:
+        game.key_hidden = True
+        game.new_game(game.seed)
     if args.room:
         game.mode = "play"
         game.enter_room(args.room, None)
