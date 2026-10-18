@@ -61,9 +61,11 @@ STYLES = {
 }
 
 
-def R(name, floor, map_pos, size, style, furn=(), wall=(), enemies=(), shape="square"):
+def R(name, floor, map_pos, size, style, furn=(), wall=(), enemies=(), shape="square", safe=False):
+    """safe: a calm room. Nothing spawns there, ever (Game.make_enemies), and
+    it plays its own gentle ambience (Game.room_ambience)."""
     return dict(name=name, floor=floor, map=map_pos, size=size, style=style,
-                furn=list(furn), wall=list(wall), enemies=list(enemies), shape=shape)
+                furn=list(furn), wall=list(wall), enemies=list(enemies), shape=shape, safe=safe)
 
 
 ROUND_RIM = 0.35    # a round room's cells count as floor when their centre is this far inside the wall
@@ -83,7 +85,7 @@ ROOMS = {
     "conservatory": R("Conservatory", "ground", (0, 0), (8, 8), "glass",
         furn=[("potted_palm", 1, 1, "E"), ("potted_palm", 6, 1, "S"), ("potted_palm", 1, 6, "E"), ("statue", 3, 0, "S"),
               ("round_table", 5, 5, "S"), ("chair", 6, 5, "auto"), ("chest", 0, 3, "E"), ("candelabra", 4, 0, "S")],
-        enemies=["bat", "goblin"], shape="round"),
+        shape="round", safe=True),      # a calm, safe room: no baddies, rain on the glass
     "music_room": R("Music Room", "ground", (0, 1), (8, 7), "blue",
         furn=[("piano", 0, 0, "E"), ("harp", 6, 0, "S"), ("chair", 2, 3, "auto"), ("chair", 5, 3, "auto"), ("candelabra", 0, 5, "S")],
         wall=[("painting_landscape", "N", 1), ("painting_lady", "W", 3)], enemies=["ghost"]),
@@ -313,7 +315,8 @@ class Room:
             o.side, o.index = side, index
             o.mount = wdef[3] if len(wdef) > 3 else WALL_MOUNT.get(typ, WALL_MOUNT_DEFAULT)
             self.walls.append(o)
-        self.enemies = list(spec["enemies"])
+        self.safe = spec.get("safe", False)
+        self.enemies = [] if self.safe else list(spec["enemies"])
 
     def aim_seat(self, o):
         """Facing for a chair or armchair marked "auto"."""

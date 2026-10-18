@@ -139,7 +139,7 @@ MOVE_KEYS = {pygame.K_UP: 1, pygame.K_w: 1, pygame.K_DOWN: -1, pygame.K_s: -1}
 ACTION_KEYS = (pygame.K_SPACE, pygame.K_e, pygame.K_RETURN, pygame.K_KP_ENTER)
 MAP_KEYS = (pygame.K_TAB, pygame.K_m)
 
-SOUND_VOL = {"door_creak": 0.85, "ambience": 0.35, "title_theme": 0.5, "creak1": 0.35, "creak2": 0.35, "door": 0.4,
+SOUND_VOL = {"door_creak": 0.85, "ambience": 0.35, "rain_glass": 0.3, "title_theme": 0.5, "creak1": 0.35, "creak2": 0.35, "door": 0.4,
              "search": 0.5, "key_found": 0.7, "locked": 0.6, "unlock": 0.8, "win": 0.7, "gameover": 0.7,
              "push": 0.5, "ghost": 0.45, "goblin": 0.5, "bat": 0.35, "spider": 0.4, "skeleton": 0.5,
              "monster": 0.6, "stairs": 0.5, "rug": 0.5, "hurt": 0.5, "step1": 0.25, "step2": 0.25,
@@ -554,6 +554,13 @@ class Game:
         self.searching = None
         if first and self.scoring:
             self.add_points(PTS_ROOM)
+        if self.sounds.loop_name in ("ambience", "rain_glass"):   # in play: the room's own ambience
+            self.sounds.loop(self.room_ambience())
+
+    def room_ambience(self):
+        """The background loop for the room we're in: soft rain on the glass
+        in a safe room (the conservatory), the house's wind and drone elsewhere."""
+        return "rain_glass" if self.room is not None and self.room.safe else "ambience"
 
     def coop_host_enter(self, prev, shared):
         """Host moving room: share the partner's enemies if they are in here,
@@ -582,7 +589,7 @@ class Game:
     def make_enemies(self, r, px, py):
         """Room r's enemies, placed well away from someone coming in at (px, py)."""
         out = []
-        if not self.enemies_on or not r.enemies:
+        if not self.enemies_on or not r.enemies or r.safe:    # (a safe room never has any)
             return out
         rng = random.Random(f"{self.seed}:{r.id}")
         reach = r.flood((int(px), int(py)))
@@ -825,7 +832,7 @@ class Game:
             self.px += 1.2                  # stand beside the host, not on top of them
             self.entry = (self.px, self.py, self.facing)
         self.mode = "play"
-        self.sounds.loop("ambience")
+        self.sounds.loop(self.room_ambience())
         self.sounds.play("door")
         self.say(f"You are {CHARACTERS[mine]}, with {CHARACTERS[theirs]}. Find the key and both get out!")
 
@@ -886,6 +893,8 @@ class Game:
                 self.enemies = self.make_enemies(self.room, cp.partner.tx, cp.partner.ty)
         else:
             self.enemies = []             # the host sends them
+        if self.sounds.loop_name in ("ambience", "rain_glass"):
+            self.sounds.loop(self.room_ambience())
 
     def update_watch(self, dt):
         cp = self.coop
@@ -934,7 +943,7 @@ class Game:
         self.character = CHAR_ORDER[self.title_pick]
         self.new_game(seed if seed is not None else int(time.time() * 1000) % 1_000_000)
         self.mode = "play"
-        self.sounds.loop("ambience")
+        self.sounds.loop(self.room_ambience())
         self.sounds.play("door")
         self.say("Find the front door key, then escape through the front door!")
 
@@ -2896,7 +2905,7 @@ def main(argv=None):
     if args.room:
         game.mode = "play"
         game.enter_room(args.room, None)
-        game.sounds.loop("ambience")
+        game.sounds.loop(game.room_ambience())
     if args.pos:
         game.px, game.py = (float(v) for v in args.pos.split(","))
         game.entry = (game.px, game.py, game.facing)

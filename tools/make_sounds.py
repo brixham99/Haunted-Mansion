@@ -135,6 +135,27 @@ def make_ambience():
     return loopable(x, 1.0)
 
 
+def make_rain_glass():
+    """The conservatory: a gentle, steady rain on the glass roof. A soft hush
+    of distant rain under scattered small drops ticking on the panes (each a
+    tiny bright click with a short glassy ring), no wind or drone. Loops."""
+    r = np.random.default_rng(31)
+    d = 12.5
+    t = t_(d)
+    n = len(t)
+    hush = bp_fast(r.standard_normal(n), 400, 5200) * (0.85 + 0.15 * np.sin(2 * np.pi * t / 6.25) ** 2)
+    hush = lp_fast(hush, 3000)
+    drops = np.zeros(n)
+    k = np.arange(int(0.03 * SR))
+    for at in r.uniform(0, d - 0.05, int(d * 14)):
+        i = int(at * SR)
+        f = r.uniform(2400, 5200)
+        ping = np.sin(2 * np.pi * f * k / SR) * np.exp(-k / SR * r.uniform(90, 180)) * r.uniform(0.15, 0.6)
+        drops[i:i + len(k)] += ping[: n - i]
+    x = hush / np.max(np.abs(hush)) * 0.5 + drops * 0.35
+    return loopable(reverb(x, 0.8, 0.2)[:n], 1.0)
+
+
 def make_creak(seed, f0):
     r = np.random.default_rng(seed)
     d = 0.9
@@ -417,7 +438,7 @@ def make_bat_flap():
 
 
 MAKERS = {
-    "title_theme": (make_title_theme, 0.7), "ambience": (make_ambience, 0.7),
+    "title_theme": (make_title_theme, 0.7), "ambience": (make_ambience, 0.7), "rain_glass": (make_rain_glass, 0.6),
     "creak1": (lambda: make_creak(1, 18), 0.6), "creak2": (lambda: make_creak(2, 11), 0.6),
     "door": (make_door, 0.6), "search": (make_search, 0.5), "key_found": (make_key_found, 0.7),
     "locked": (make_locked, 0.7), "unlock": (make_unlock, 0.8), "win": (make_win, 0.8),

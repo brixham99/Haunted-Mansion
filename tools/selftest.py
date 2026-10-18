@@ -712,6 +712,66 @@ def round_room_checks(g):
     check(err < 1e-9 and abs(G.HW / G.HH - 2) < 1e-9, f"the conservatory's circle is drawn as an exact 2:1 ellipse (err {err:.1g})")
 
 
+def safe_room_checks(g):
+    """The conservatory is a calm, safe room: nothing ever spawns there (from
+    any doorway, any seed, even if its data named a baddie), the baddies next
+    door can't follow you in, and it has its own gentle rain-on-glass loop."""
+    house = g.house
+    r = house.rooms["conservatory"]
+    check(r.safe and r.enemies == [], f"the conservatory is safe, with no baddies listed ({r.enemies})")
+    check([rid for rid, x in house.rooms.items() if x.safe] == ["conservatory"], "and it is the only safe room")
+    spawned = 0
+    for seed in range(40):
+        g.new_game(seed)
+        g.mode = "play"
+        for side in ("N", "S", "E", "W"):
+            if r.door_range(side) is None:
+                continue
+            g.enter_room("conservatory", ("door", side, 0.0))
+            spawned += len(g.enemies)
+        g.enter_room("conservatory", None)
+        spawned += len(g.enemies)
+    check(spawned == 0, f"nothing spawns in the conservatory over 40 games ({spawned})")
+    r.enemies = ["goblin", "bat"]                 # even a data slip can't put one there
+    check(g.make_enemies(r, r.cx, r.cy) == [], "a safe room refuses any baddie its data names")
+    r.enemies = []
+    # a ghost in the drawing room chases you to the conservatory door: it stays behind
+    g.new_game(3)
+    g.mode = "play"
+    g.enter_room("drawing_room", None)
+    dr = g.room
+    side = next(s for s, d in dr.doors.items() if d["to"] == "conservatory")
+    g.enter_room("drawing_room", ("door", side, 0.0))
+    g.grace = 0.0
+    gh = G.Enemy("ghost", g.px + (1.5 if side == "W" else 0), g.py + (1.5 if side == "N" else 0), g.rng)
+    g.enemies = [gh]
+    for _ in range(30):
+        g.update(DT)
+    chased = gh.chasing
+    nxt = dr.doors[side]["to"]
+    g.enter_room(nxt, ("door", M.OPPOSITE[side], 0.0))
+    check(chased and g.room.id == "conservatory" and g.enemies == [] and gh not in g.enemies,
+          "a baddie chasing you to the conservatory door can't follow you in")
+    god, g.god, lives, g.grace = g.god, False, g.lives, 0.0
+    for _ in range(120):
+        g.update(DT)
+    check(g.enemies == [] and g.lives == lives, "and nothing finds you in there")
+    g.god = god
+    # its ambience: soft rain on the glass, back to the house's wind outside
+    g.sounds.loop_name = "ambience"
+    g.enter_room("conservatory", None)
+    check(g.sounds.loop_name == "rain_glass" and os.path.exists(os.path.join(G.SOUND_DIR, "rain_glass.wav")),
+          f"rain on the glass in the conservatory ({g.sounds.loop_name})")
+    check(G.SOUND_VOL["rain_glass"] <= G.SOUND_VOL["ambience"], "played softly")
+    g.enter_room("music_room", None)
+    check(g.sounds.loop_name == "ambience", f"and the house's own ambience again outside ({g.sounds.loop_name})")
+    g.sounds.loop_name = "title_theme"
+    g.enter_room("conservatory", None)
+    check(g.sounds.loop_name == "title_theme", "(only swapped in play, never over the title music)")
+    g.sounds.loop_name = None
+    print(f"safe room: conservatory, {spawned} spawns over 40 games")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true")
@@ -731,6 +791,7 @@ def main():
     round_room_checks(g)
     shadow_checks(g)
     kitchen_checks(g.house)
+    safe_room_checks(g)
     vampire_checks(g)
     # ---- full tour with enemies (invulnerable)
     if not args.quick:

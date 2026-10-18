@@ -250,6 +250,17 @@ def main():
         host.draw()
         pygame.image.save(screen, "/tmp/hm_net_map.png")
         host.show_map = False
+    # ---- the conservatory is a safe room in two-player too: the host spawns nothing there for the joiner
+    try:
+        pc.go_to_room("conservatory")
+        step(games, 30)
+        check(cli.room.id == "conservatory" and host.coop.partner.room == "conservatory",
+              "the joiner walks into the conservatory")
+        check(not host.coop.other_enemies and not cli.enemies,
+              f"and finds no baddies there ({host.coop.other_enemies} / {[e.kind for e in cli.enemies]})")
+        check(cli.sounds.loop_name == "rain_glass", f"just rain on the glass ({cli.sounds.loop_name})")
+    except S.Stuck as e:
+        check(False, f"client stuck on the way to the conservatory: {e}")
     # ---- the client finds the key, wherever it is
     kind = host.key_place[1]
     hs, cs = host.score, cli.score
