@@ -41,6 +41,8 @@ HW, HH = TILE_W // 2, TILE_H // 2
 SLAB = 18                      # floor thickness shown along the open front edges
 PLAYER_R = 0.24                # half-size of the player's collision box (tiles)
 PLAYER_SPEED = 3.0             # tiles per second
+ENEMY_SPEED_SCALE = 0.6        # every baddie's speed (ENEMY_STATS, wander and chase) times this; 1.0 = original
+ENEMY_BOB_RATE = 8.0 * ENEMY_SPEED_SCALE ** 0.5   # walkers' step bob follows their (slower) pace
 PUSH_DELAY = 0.25              # s of shoving before a pushable moves
 SLIDE_TIME = 0.22
 SEARCH_TIME = 0.55
@@ -170,6 +172,7 @@ class Enemy:
         self.kind = kind
         st = ENEMY_STATS[kind]
         self.speed, self.sense, self.floats, self.r, self.z0 = st["speed"], st["sense"], st["floats"], st["r"], st["z"]
+        self.speed *= ENEMY_SPEED_SCALE   # tiles/s; the host runs every enemy, so two-player matches
         self.x, self.y = x, y
         self.left = rng.random() < 0.5
         self.path = []
@@ -1712,7 +1715,7 @@ class Game:
             e = what[1]
             img = self.art.enemy(e.kind, e.left)
             z = e.z0 + (8 * math.sin(e.phase * 2) if e.floats else 0)
-            bob = 0 if e.floats else abs(math.sin(e.phase * 8)) * 3
+            bob = 0 if e.floats else abs(math.sin(e.phase * ENEMY_BOB_RATE)) * 3
             self.draw_shadow(e.x, e.y, e.r * 2)
             ex, ey = self.P(e.x, e.y, z + bob)
             if e.kind == "ghost":
