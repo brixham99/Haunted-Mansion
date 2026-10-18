@@ -445,6 +445,50 @@ def anim_checks(g):
     print(f"anims: bat {flips} frames/s, skeleton {changes} frames over {walked:.2f} tiles, {falls} footfalls")
 
 
+def exit_frame_checks(g):
+    """The door frames marking exits: strictly isometric, and the front-edge
+    ghost frames fade when someone stands behind them."""
+    worst, edges, exits = 0.0, 0, 0
+    for r in M.Mansion().rooms.values():
+        for side in ("N", "W", "S", "E"):
+            rng = r.door_range(side)
+            if rng is None:
+                continue
+            exits += 1
+            W = {"N": lambda u, z, n: g.P(u, n, z, r), "W": lambda u, z, n: g.P(n, u, z, r),
+                 "S": lambda u, z, n: g.P(u, r.d + n, z, r), "E": lambda u, z, n: g.P(r.w + n, u, z, r)}[side]
+            for _, poly in G.door_frame_polys(W, rng.start, rng.stop, (100, 80, 60), 0.0, 0.07):
+                for (x0, y0), (x1, y1) in zip(poly, poly[1:] + poly[:1]):
+                    dx, dy = x1 - x0, y1 - y0
+                    if abs(dx) < 1e-9:
+                        continue            # an upright
+                    edges += 1
+                    worst = max(worst, abs(abs(dy / dx) - 0.5) if abs(dy) > 1e-9 else 0.0)
+    check(worst < 1e-9, f"door frame edges are upright or exactly 2:1 isometric ({edges} sloped edges, worst error {worst:.2g})")
+    check(exits >= 60, f"every exit gets a frame ({exits} exits)")
+    g.new_game(1)
+    g.mode = "play"
+    g.enter_room("staircase_hall", None)
+    g.fade = None
+    r = g.room
+    rng = r.door_range("S")
+    lay, at = g.ghost_frame(r, "S")
+    rect = lay.get_rect(topleft=at)
+    keep = g.enemies
+    g.enemies = []
+    g.px, g.py = (rng.start + rng.stop) / 2, r.d - 0.3
+    behind = g.ghost_fade(r, "S", rect)
+    near = g.exit_near(r, "S")
+    g.px, g.py = 1.0, 1.0
+    far = g.ghost_fade(r, "S", rect)
+    g.enemies = keep
+    check(behind < 0.6 and far == 1.0, f"the ghost frame fades when the player is behind it ({behind:.2f} vs {far:.2f})")
+    check(near > 0.5 and g.exit_near(r, "S") == 0.0, "the exit glow only comes on near the doorway")
+    lands = [r for r in M.Mansion().rooms.values() if "landing" in r.id]
+    check(len(lands) == 2 and all(r.style["floor"] == "parquet" for r in lands), "both landings have parquet floors")
+    check(G.GHOST_FRAME_ALPHA / 255 <= 0.45 and 0.5 <= G.BACK_FRAME_ALPHA / 255 <= 0.65, "frame see-through levels")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true")
@@ -460,6 +504,7 @@ def main():
         os.makedirs(args.shots, exist_ok=True)
     walk_checks(g)
     anim_checks(g)
+    exit_frame_checks(g)
     # ---- full tour with enemies (invulnerable)
     if not args.quick:
         g.new_game(1)

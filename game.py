@@ -262,6 +262,86 @@ def depth_sort(items):
     return out
 
 
+# ---------------------------------------------------------------- exit door frames
+# Every way through to another room is marked by a door frame: a semi-
+# transparent architrave on the back (N/W) walls, baked into the room
+# background, and a fainter "ghost" frame standing on the open front (S/E)
+# edges, drawn over the room each frame so it can fade out of the way.
+PARQUET_W = 0.25                 # tiles: parquet block width (blocks are twice as long)
+FRAME_WOOD = (104, 70, 44)
+FRAME_STONE = (132, 126, 116)
+BACK_FRAME_ALPHA = 150           # ~59% on the back walls
+BACK_VOID_ALPHA = 222            # the doorway itself: a dark, faintly see-through void
+GHOST_FRAME_ALPHA = 100          # ~39% on the open front edges
+GHOST_FADE_MIN = 0.4             # share kept when someone is right behind a ghost frame
+GHOST_FADE_D = 2.6               # ...rising back to full this many tiles in from the edge
+EXIT_NEAR = 2.2                  # tiles: a soft pulse when the player is this close to an exit
+
+
+def frame_material(style):
+    """Stone frames in brick, stone and plaster rooms; dark wood elsewhere."""
+    return FRAME_STONE if style["wall"] in ("brick", "stone", "plaster") else FRAME_WOOD
+
+
+def door_frame_boxes(a, b, n0, n1):
+    """The pieces of a door frame round the opening u in [a, b] (tiles along
+    the wall), z up from the floor (px), n out of the wall towards the
+    viewer (tiles, n0..n1 is the frame's depth). (u0, u1, z0, z1, n0, n1, k)
+    with k the brightness of that piece; back-to-front drawing order."""
+    mid = (a + b) / 2
+    d = n1 - n0
+    return [
+        (a - .16, a, 0, DOOR_H, n0, n1, 1.0),                         # left post
+        (b, b + .16, 0, DOOR_H, n0, n1, 1.0),                         # right post
+        (a - .19, a + .02, 0, 26, n0, n1 + .3 * d, 0.85),              # plinth blocks
+        (b - .02, b + .19, 0, 26, n0, n1 + .3 * d, 0.85),
+        (a - .22, b + .22, DOOR_H, DOOR_H + 24, n0, n1 + .1 * d, 1.0),  # lintel
+        (a - .28, b + .28, DOOR_H + 24, DOOR_H + 32, n0, n1 + .6 * d, 1.18),  # cornice
+        (mid - .1, mid + .1, DOOR_H - 12, DOOR_H + 26, n0, n1 + .4 * d, 1.25),  # keystone
+    ]
+
+
+def box_faces(W, box, col):
+    """Visible faces of one frame piece as (colour, polygon) back to front:
+    the +u end (faces the viewer's right), the top, then the front face.
+    W(u, z, n) -> screen point on the frame's wall plane."""
+    u0, u1, z0, z1, n0, n1, k = box
+    c = art.shade(col, k)
+    return [
+        (art.shade(c, 0.6), [W(u1, z0, n0), W(u1, z0, n1), W(u1, z1, n1), W(u1, z1, n0)]),
+        (art.shade(c, 1.3), [W(u0, z1, n0), W(u1, z1, n0), W(u1, z1, n1), W(u0, z1, n1)]),
+        (c, [W(u0, z0, n1), W(u1, z0, n1), W(u1, z1, n1), W(u0, z1, n1)]),
+    ]
+
+
+def door_frame_polys(W, a, b, col, n0, n1):
+    """All the (colour, polygon) pieces of a door frame, mouldings included."""
+    out = []
+    for box in door_frame_boxes(a, b, n0, n1):
+        out += box_faces(W, box, col)
+    dark, light = art.shade(col, 0.55), art.shade(col, 1.45)
+    for u in (a - .11, a - .06, b + .06, b + .11):   # fluting on the posts
+        out.append((dark, [W(u - .008, 34, n1), W(u + .008, 34, n1), W(u + .008, DOOR_H - 8, n1), W(u - .008, DOOR_H - 8, n1)]))
+    for u0, u1 in ((a - .03, a - .012), (b + .012, b + .03)):   # bead along the inner edge
+        out.append((light, [W(u0, 26, n1), W(u1, 26, n1), W(u1, DOOR_H + 4, n1), W(u0, DOOR_H + 4, n1)]))
+    out.append((light, [W(a - .03, DOOR_H + 2, n1), W(b + .03, DOOR_H + 2, n1), W(b + .03, DOOR_H + 5, n1), W(a - .03, DOOR_H + 5, n1)]))
+    return out
+
+
+def polys_layer(polys, pad=2):
+    """Render (colour, polygon) pieces onto their own transparent surface.
+    -> (surface, (x, y)) where (x, y) is the screen position of its corner."""
+    xs = [p[0] for _, poly in polys for p in poly]
+    ys = [p[1] for _, poly in polys for p in poly]
+    x0, y0 = math.floor(min(xs)) - pad, math.floor(min(ys)) - pad
+    w, h = math.ceil(max(xs)) - x0 + pad, math.ceil(max(ys)) - y0 + pad
+    surf = pygame.Surface((w, h), pygame.SRCALPHA, 32)
+    surf.fill((0, 0, 0, 0))
+    for c, poly in polys:
+        pygame.draw.polygon(surf, (*c, 255), [(x - x0, y - y0) for x, y in poly])
+    return surf, (x0, y0)
+
+
 class Game:
     def __init__(self, screen, seed=None, character="archie", enemies=True, god=False, save=True, title=True,
                  online=None, scores_file=None):
@@ -310,6 +390,7 @@ class Game:
         self.bg_cache = {}
         self.dark_cache = {}
         self.glow_cache = {}
+        self.ghost_cache = {}     # (room, side) -> the front-edge ghost door frame layer
         self.text_cache = {}
         self.player_light = self._make_player_light()
         self.mode = "title" if title else "play"
@@ -1502,7 +1583,9 @@ class Game:
         pygame.draw.polygon(s, art.shade(st["f2"], 0.45), [P(0, r.d), P(r.w, r.d), P(r.w, r.d, -SLAB), P(0, r.d, -SLAB)])
         pygame.draw.polygon(s, art.shade(st["f2"], 0.32), [P(r.w, 0), P(r.w, r.d), P(r.w, r.d, -SLAB), P(r.w, 0, -SLAB)])
         kind = st["floor"]
-        for x in range(r.w):
+        if kind == "parquet":
+            self._draw_parquet(s, r, rnd)
+        for x in range(r.w if kind != "parquet" else 0):
             for y in range(r.d):
                 j = rnd.uniform(0.92, 1.06)
                 quad = [P(x, y), P(x + 1, y), P(x + 1, y + 1), P(x, y + 1)]
@@ -1546,10 +1629,6 @@ class Game:
                 else:
                     poly = [P(r.w + t0, a), P(r.w + t0, b), P(r.w + t1, b), P(r.w + t1, a)]
                 pygame.draw.polygon(s, c, poly)
-            mid = (a + b) / 2
-            pts = [P(mid - .3, r.d - .5), P(mid + .3, r.d - .5), P(mid, r.d - .15)] if side == "S" else \
-                  [P(r.w - .5, mid - .3), P(r.w - .5, mid + .3), P(r.w - .15, mid)]
-            pygame.draw.polygon(s, art.shade(st["f1"], 1.4), pts)
         self._draw_wall(s, r, "N")
         self._draw_wall(s, r, "W")
         for o in r.walls:
@@ -1562,6 +1641,37 @@ class Game:
                 x0, y0 = P(0, o.index + n)[0], P(0, o.index, top_z)[1]
             s.blit(img, (round(x0), round(y0)))
         return s
+
+    def _draw_parquet(self, s, r, rnd):
+        """Oak herringbone parquet. Every block runs along one of the two
+        floor axes, so all its edges sit on the 2:1 isometric lines: blocks
+        are PARQUET_W x 2*PARQUET_W tiles, a lengthways (x) block at cell
+        (ox, oy) with a crossways (y) one tucked under its left end, the pair
+        repeated on the lattice (1, 1) and (2, -2) cells."""
+        st = r.style
+        w = PARQUET_W
+        P = lambda x, y: self.P(x, y, 0, r)
+        gap, f1, f2 = art.shade(st["f2"], 0.5), st["f1"], st["f2"]
+        nx, ny = int(math.ceil(r.w / w)), int(math.ceil(r.d / w))
+        span = nx + ny + 4
+        for i in range(-span, span + 1):
+            for j in range(-span // 2 - 2, span // 2 + 3):
+                ox, oy = i + 2 * j, i - 2 * j
+                for along_x, (cx, cy) in ((True, (ox, oy)), (False, (ox, oy + 1))):
+                    x0, y0 = cx * w, cy * w
+                    x1, y1 = (x0 + 2 * w, y0 + w) if along_x else (x0 + w, y0 + 2 * w)
+                    x0, y0, x1, y1 = max(0, x0), max(0, y0), min(r.w, x1), min(r.d, y1)
+                    if x1 - x0 < 1e-6 or y1 - y0 < 1e-6:
+                        continue
+                    pr = random.Random(f"{r.id}{cx},{cy}")
+                    c = art.shade(art.lerp(f1, f2, pr.uniform(0.0, 0.7)), pr.uniform(0.92, 1.06) * (1.04 if along_x else 0.93))
+                    pygame.draw.polygon(s, c, [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)])
+                    g = pr.uniform(0.3, 0.7)   # a grain line down the block
+                    if along_x:
+                        pygame.draw.line(s, art.shade(c, 0.86), P(x0 + .02, y0 + g * (y1 - y0)), P(x1 - .02, y0 + g * (y1 - y0)), 1)
+                    else:
+                        pygame.draw.line(s, art.shade(c, 0.86), P(x0 + g * (x1 - x0), y0 + .02), P(x0 + g * (x1 - x0), y1 - .02), 1)
+                    pygame.draw.polygon(s, gap, [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)], 1)
 
     def _draw_wall(self, s, r, side):
         st = r.style
@@ -1626,16 +1736,19 @@ class Game:
             pygame.draw.polygon(s, art.shade(cap, 1.15), [self.P(0, 0, WALL_H, r), self.P(0, n, WALL_H, r), self.P(-t, n, WALL_H, r), self.P(-t, -t, WALL_H, r)])
             pygame.draw.polygon(s, art.shade(cap, 0.75), [self.P(-t, n, WALL_H, r), self.P(0, n, WALL_H, r), self.P(0, n, -SLAB, r), self.P(-t, n, -SLAB, r)])
         rng = r.door_range(side)
-        if rng is not None:
+        if rng is not None:   # the way through: a dark doorway in a semi-transparent frame
             a, b = rng.start, rng.stop
-            frame = art.shade(st["w2"], 0.55)
-            pygame.draw.polygon(s, frame, [Q(a - .14, 0), Q(b + .14, 0), Q(b + .14, DOOR_H + 14), Q(a - .14, DOOR_H + 14)])
-            hole = [Q(a, 0), Q(b, 0), Q(b, DOOR_H - 34)]
-            for i in range(1, 10):
-                tt = i / 9
-                hole.append(Q(b - tt * (b - a), DOOR_H - 34 + 34 * math.sin(tt * math.pi)))
-            pygame.draw.polygon(s, (6, 4, 8), hole)
-            pygame.draw.polygon(s, art.shade(frame, 1.5), hole, 3)
+            W = (lambda u, z, nn: self.P(u, nn, z, r)) if side == "N" else (lambda u, z, nn: self.P(nn, u, z, r))
+            void = [((8, 6, 12), [W(a, 0, 0), W(b, 0, 0), W(b, DOOR_H, 0), W(a, DOOR_H, 0)]),
+                    (art.shade(st["f2"], 0.4), [W(a, 0, 0), W(b, 0, 0), W(b, 0, -t), W(a, 0, -t)]),          # threshold
+                    (art.shade(st["w1"], 0.45 * k), [W(a, 0, 0), W(a, 0, -t), W(a, DOOR_H, -t), W(a, DOOR_H, 0)])]  # reveal
+            layer, at = polys_layer(void)
+            layer.set_alpha(BACK_VOID_ALPHA)
+            s.blit(layer, at)
+            col = art.shade(frame_material(st), 1.0 if side == "N" else 0.8)
+            layer, at = polys_layer(door_frame_polys(W, a, b, col, 0.0, 0.07))
+            layer.set_alpha(BACK_FRAME_ALPHA)
+            s.blit(layer, at)
 
     def build_darkness(self, r):
         """Per-room darkness: a vignette with pools of light round lamps,
@@ -1753,6 +1866,7 @@ class Game:
         s.blit(dark, (0, 0))
         if fd is not None and self.door_t is not None:
             self.draw_moonlight(fd)
+        self.draw_exit_frames(r)
         t = self.time
         for o in r.objs:
             g = o.t.get("glow")
@@ -1794,6 +1908,78 @@ class Game:
             s.blit(veil, (0, 0))
         if self.mode == "end":
             self.draw_end()
+
+    # ------------------------------------------------------------ exit door frames
+    def ghost_frame(self, r, side):
+        """The see-through door frame standing on an open front edge (S/E)."""
+        key = (r.id, side)
+        if key not in self.ghost_cache:
+            rng = r.door_range(side)
+            a, b = rng.start, rng.stop
+            if side == "S":
+                W = lambda u, z, nn: self.P(u, r.d + nn, z, r)
+            else:
+                W = lambda u, z, nn: self.P(r.w + nn, u, z, r)
+            col = art.lerp(frame_material(r.style), (150, 170, 200), 0.25)   # a little cold: a ghost of a frame
+            col = art.shade(col, 1.0 if side == "S" else 0.8)
+            layer, at = polys_layer(door_frame_polys(W, a, b, col, -0.05, 0.05))
+            self.ghost_cache[key] = (layer, at)
+        return self.ghost_cache[key]
+
+    def exit_centre(self, r, side):
+        """The middle of an exit's doorway on the floor, in tiles."""
+        rng = r.door_range(side)
+        mid = (rng.start + rng.stop) / 2
+        return {"N": (mid, 0.0), "W": (0.0, mid), "S": (mid, float(r.d)), "E": (float(r.w), mid)}[side]
+
+    def ghost_fade(self, r, side, rect):
+        """1.0, or less when the player, the other player or an enemy is
+        behind the front-edge frame on screen and close to it, so the frame
+        never hides them."""
+        who = [(e.x, e.y) for e in self.enemies]
+        if self.out is None:
+            who.append((self.px, self.py))
+        if self.coop is not None and self.coop.partner_here():
+            who.append((self.coop.partner.x, self.coop.partner.y))
+        f = 1.0
+        for x, y in who:
+            fx, fy = self.P(x, y, 0, r)
+            if not rect.colliderect(pygame.Rect(fx - 42, fy - 200, 84, 210)):
+                continue
+            depth = (r.d - y) if side == "S" else (r.w - x)
+            f = min(f, GHOST_FADE_MIN + (1 - GHOST_FADE_MIN) * max(0.0, min(1.0, depth / GHOST_FADE_D)))
+        return f
+
+    def exit_near(self, r, side):
+        """0..1: how close the player is to this exit (1 = in the doorway)."""
+        if self.out is not None:
+            return 0.0
+        cx, cy = self.exit_centre(r, side)
+        return max(0.0, 1.0 - math.hypot(self.px - cx, self.py - cy) / EXIT_NEAR)
+
+    def draw_exit_frames(self, r):
+        """Over the lit room: the ghost frames on the open front edges, and a
+        soft pulsing glow in any doorway the player is close to."""
+        s = self.screen
+        pulse = 0.5 + 0.5 * math.sin(self.time * 3.6)
+        for side in ("N", "W", "S", "E"):
+            if r.door_range(side) is None:
+                continue
+            near = self.exit_near(r, side)
+            if side in ("S", "E"):
+                layer, at = self.ghost_frame(r, side)
+                rect = layer.get_rect(topleft=at)
+                alpha = GHOST_FRAME_ALPHA * self.ghost_fade(r, side, rect) + 30 * near * pulse
+                layer.set_alpha(int(max(0, min(255, alpha))))
+                s.blit(layer, at)
+            if near > 0:
+                lvl = round(near * (0.55 + 0.45 * pulse) * 8) / 8   # quantised: a handful of cached sprites
+                if lvl > 0:
+                    cx, cy = self.exit_centre(r, side)
+                    z = 4 if side in ("S", "E") else DOOR_H * 0.45
+                    gs = self.glow_sprite(tuple(int(c * lvl) for c in (150, 128, 84)), 64)
+                    gx, gy = self.P(cx, cy, z, r)
+                    s.blit(gs, (gx - 64, gy - 64), special_flags=pygame.BLEND_RGB_ADD)
 
     # ------------------------------------------------------------ the open front door
     def _door_geom(self, fd):

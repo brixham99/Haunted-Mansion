@@ -54,6 +54,9 @@ STYLES = {
     "nursery":   dict(floor="boards", f1=(130, 100, 70), f2=(110, 82, 56), wall="stripe", w1=(150, 120, 120), w2=(120, 140, 150)),
     "bath":      dict(floor="tiles", f1=(200, 200, 196), f2=(40, 60, 70), wall="plaster", w1=(90, 130, 130), w2=(70, 104, 104)),
     "loft":      dict(floor="planks", f1=(92, 74, 56), f2=(70, 56, 42), wall="beams", w1=(96, 84, 70), w2=(60, 46, 34)),
+    # the landings: their own walls, with a warm oak herringbone parquet floor
+    "landing":   dict(floor="parquet", f1=(152, 104, 60), f2=(116, 76, 42), wall="panel", w1=(46, 66, 52), w2=(98, 72, 44)),
+    "loft_landing": dict(floor="parquet", f1=(140, 98, 58), f2=(106, 72, 42), wall="beams", w1=(96, 84, 70), w2=(60, 46, 34)),
 }
 
 
@@ -144,7 +147,7 @@ ROOMS = {
         furn=[("boiler", 0, 0, "E"), ("crate", 5, 5, "S"), ("coal_heap", 5, 0, "S"), ("crate", 6, 6, "S")],
         enemies=["monster"]),
     # ------------------------------------------------------------- first floor
-    "landing": R("Landing", "first", (1, 1), (8, 8), "hall",
+    "landing": R("Landing", "first", (1, 1), (8, 8), "landing",
         furn=[("stairs_down", 6, 0, "S", "staircase_hall"), ("grandfather_clock", 0, 0, "E"), ("rug", 3, 4, "S"),
               ("statue", 0, 7, "E"), ("potted_palm", 7, 7, "S")],
         wall=[("painting", "N", 1), ("painting_lady", "W", 6)], enemies=["ghost"]),
@@ -183,7 +186,7 @@ ROOMS = {
               ("chest", 2, 4, "S")],
         enemies=["spider"]),
     # -------------------------------------------------------------------- loft
-    "loft_landing": R("Loft Landing", "loft", (1, 1), (7, 7), "loft",
+    "loft_landing": R("Loft Landing", "loft", (1, 1), (7, 7), "loft_landing",
         furn=[("trapdoor", 5, 0, "S", "upper_corridor"), ("crate", 0, 5, "S"), ("trunk", 0, 0, "E")],
         wall=[("cobweb", "W", 4)], enemies=["bat"]),
     "dusty_attic": R("Dusty Attic", "loft", (1, 0), (9, 8), "loft",
