@@ -489,7 +489,27 @@ def exit_frame_checks(g):
     check(near > 0.5 and g.exit_near(r, "S") == 0.0, "the exit glow only comes on near the doorway")
     lands = [r for r in M.Mansion().rooms.values() if "landing" in r.id]
     check(len(lands) == 2 and all(r.style["floor"] == "parquet" for r in lands), "both landings have parquet floors")
-    check(G.GHOST_FRAME_ALPHA / 255 <= 0.45 and 0.5 <= G.BACK_FRAME_ALPHA / 255 <= 0.65, "frame see-through levels")
+    check(G.GHOST_FRAME_ALPHA / 255 <= 0.45, "the front-edge ghost frames stay see-through")
+    check(G.BACK_FRAME_ALPHA == 255 and G.BACK_VOID_ALPHA == 255, "back-wall frames and openings are solid")
+    # no wall shows through a back-wall doorway: the opening is pure void colour in every room
+    bad, n = [], 0
+    for rr in M.Mansion().rooms.values():
+        bg = None
+        for side in ("N", "W"):
+            rng = rr.door_range(side)
+            if rng is None:
+                continue
+            if bg is None:
+                bg = g.build_background(rr)
+            a, b = rng.start, rng.stop
+            for fu in (0.45, 0.6, 0.75, 0.9):
+                for z in (30, 70, 110, 150):
+                    u = a + (b - a) * fu
+                    x, y = g.P(u, 0, z, rr) if side == "N" else g.P(0, u, z, rr)
+                    n += 1
+                    if tuple(bg.get_at((int(x), int(y))))[:3] != G.BACK_VOID:
+                        bad.append((rr.id, side, round(u, 2), z, tuple(bg.get_at((int(x), int(y))))[:3]))
+    check(n > 100 and not bad, f"back-wall doorways are solid black ({n} samples, wall showing at {bad[:4]})")
 
 
 def shadow_checks(g):

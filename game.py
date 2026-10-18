@@ -291,15 +291,16 @@ def depth_sort(items):
 
 
 # ---------------------------------------------------------------- exit door frames
-# Every way through to another room is marked by a door frame: a semi-
-# transparent architrave on the back (N/W) walls, baked into the room
+# Every way through to another room is marked by a door frame: a solid
+# architrave round a solid black opening on the back (N/W) walls, baked into the room
 # background, and a fainter "ghost" frame standing on the open front (S/E)
 # edges, drawn over the room each frame so it can fade out of the way.
 PARQUET_W = 0.25                 # tiles: parquet block width (blocks are twice as long)
 FRAME_WOOD = (104, 70, 44)
 FRAME_STONE = (132, 126, 116)
-BACK_FRAME_ALPHA = 150           # ~59% on the back walls
-BACK_VOID_ALPHA = 222            # the doorway itself: a dark, faintly see-through void
+BACK_FRAME_ALPHA = 255           # back-wall frames are solid: no wall shows through them
+BACK_VOID_ALPHA = 255            # ...nor through the doorway itself, a solid black void
+BACK_VOID = (8, 6, 12)
 GHOST_FRAME_ALPHA = 100          # ~39% on the open front edges
 GHOST_FADE_MIN = 0.4             # share kept when someone is right behind a ghost frame
 GHOST_FADE_D = 2.6               # ...rising back to full this many tiles in from the edge
@@ -1787,10 +1788,10 @@ class Game:
             pygame.draw.polygon(s, art.shade(cap, 1.15), [self.P(0, 0, WALL_H, r), self.P(0, n, WALL_H, r), self.P(-t, n, WALL_H, r), self.P(-t, -t, WALL_H, r)])
             pygame.draw.polygon(s, art.shade(cap, 0.75), [self.P(-t, n, WALL_H, r), self.P(0, n, WALL_H, r), self.P(0, n, -SLAB, r), self.P(-t, n, -SLAB, r)])
         rng = r.door_range(side)
-        if rng is not None:   # the way through: a dark doorway in a semi-transparent frame
+        if rng is not None:   # the way through: a solid black doorway in a solid frame
             a, b = rng.start, rng.stop
             W = (lambda u, z, nn: self.P(u, nn, z, r)) if side == "N" else (lambda u, z, nn: self.P(nn, u, z, r))
-            void = [((8, 6, 12), [W(a, 0, 0), W(b, 0, 0), W(b, DOOR_H, 0), W(a, DOOR_H, 0)]),
+            void = [(BACK_VOID, [W(a, 0, 0), W(b, 0, 0), W(b, DOOR_H, 0), W(a, DOOR_H, 0)]),
                     (art.shade(st["f2"], 0.4), [W(a, 0, 0), W(b, 0, 0), W(b, 0, -t), W(a, 0, -t)]),          # threshold
                     (art.shade(st["w1"], 0.45 * k), [W(a, 0, 0), W(a, 0, -t), W(a, DOOR_H, -t), W(a, DOOR_H, 0)])]  # reveal
             layer, at = polys_layer(void)
