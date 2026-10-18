@@ -270,33 +270,31 @@ def _flight_row(g, r, s, j):
 
 def draw_wall_opening(g, s, r):
     """Hall: the flight's top step is level with the top of the wall, so it
-    climbs on through a dark opening in the back wall and the ceiling over
-    it (a dark hole in the ceiling plane, trimmed in oak). The landing:
-    nothing on the walls."""
+    climbs on through a dark opening in the back wall, trimmed in oak. (No
+    ceiling is drawn in the cut-away room, so no hole in it either: a dark
+    patch at ceiling height would hang in mid-air beside the top steps,
+    over the panelling behind them.) The landing: nothing on the walls."""
     gd = r.grand
     if gd["kind"] != "stairs":
         return
     P = _P(g, r)
     x0, x1 = gd["x0"], gd["x1"]
     top = WALL_H
-    low = top - 120
+    # the opening only reaches down as far as the flight's own underside where it
+    # meets the wall (the stringers' lower edge): with the space under the stairs
+    # open, any deeper and its black shows through below the top steps, where the
+    # wall's panelling and wallpaper carry on behind the flight
+    low = stringer_z(r, 0.0) + 4
     # the opening in the back wall
     _quad(s, (9, 6, 9), [P(x0, 0, low), P(x1, 0, low), P(x1, 0, top), P(x0, 0, top)])
-    # the hole in the ceiling above the top of the flight, going up into the dark
-    deep = 1.6
-    _quad(s, (6, 4, 7), [P(x0, 0, top), P(x1, 0, top), P(x1, deep, top), P(x0, deep, top)])
     for k in range(1, 4):         # the flight going on up, out of sight
         z = top + k * 18
         c = art.shade(OAK_DARK, 0.75 - k * 0.18)
         pygame.draw.line(s, c, P(x0 + 0.05, 0, z), P(x1 - 0.05, 0, z), 2)
         pygame.draw.line(s, art.shade(RUNNER, 0.55 - k * 0.14), P(x0 + 0.34, 0, z), P(x1 - 0.34, 0, z), 2)
-    # dark oak architrave up the sides of the wall opening, and a trim round the ceiling hole
+    # dark oak architrave up the sides of the wall opening
     for xa in (x0, x1):
-        _quad(s, OAK, [P(xa - 0.08, 0, low - 8), P(xa + 0.08, 0, low - 8), P(xa + 0.08, 0, top), P(xa - 0.08, 0, top)])
-    trim = art.shade(OAK, 1.15)
-    pygame.draw.line(s, trim, P(x0, deep, top), P(x1, deep, top), 4)
-    pygame.draw.line(s, trim, P(x1, 0, top), P(x1, deep, top), 4)
-    pygame.draw.line(s, art.shade(OAK, 0.7), P(x0, 0, top), P(x0, deep, top), 3)
+        _quad(s, OAK, [P(xa - 0.08, 0, low), P(xa + 0.08, 0, low), P(xa + 0.08, 0, top), P(xa - 0.08, 0, top)])
 
 
 # ------------------------------------------------------------------ the gallery
