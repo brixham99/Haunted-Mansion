@@ -2,21 +2,26 @@
 
 The host owns the house: the seed (so both games build the same mansion and
 hide the key in the same place), the key, furniture, enemies (in every room
-a player is in), the shared lives, the team score and the end of the game.
+a player is in), when the joiner is hurt, caught or escapes, and the end of
+the game.
 Each game moves its own player and sends its position 20 times a second;
 the joining game asks the host before pushing, lifting, searching, picking
 up the key or opening the front door, and the host checks each request.
 
 Rules (documented in the README):
-- The key is the team's: once either player has it, either can open the
-  front door, and both escape together.
-- Lives are shared: COOP_LIVES for the pair; a touch costs one life from the
-  pool and sends that player back to where they came in.
-- One team score: both players' walking seconds, 5 for each room first
-  entered by either, 50 for the key, 200 for the escape. The host types the
-  team name (for example "Archie+Holly") for the online Top 10.
-- If the other game goes away, the remaining player carries on alone (the
-  joining game takes over its own copy of the house).
+- Each player has their own COOP_LIVES hearts and their own score, by the
+  single-player rules: their own walking seconds, 5 for each room THEY
+  discover, 50 for whoever picks up the key, 200 for each player who escapes.
+- The key is the team's: once either player has it, the front door is
+  unlocked for both, but each player has to walk out through it themselves.
+- A player who is out (caught for the last time, or escaped) watches the
+  other one ("Watching Holly") and can't touch anything. The game ends when
+  both are out; then each game shows its own end screen and Top 10 name entry.
+- The host decides when the joiner is hurt, caught or escapes; each game
+  keeps its own score.
+- If the other game goes away, a player still in the house carries on alone
+  (the joining game takes over its own copy of the house); a player who was
+  watching goes to their end screen.
 """
 
 import math
@@ -48,6 +53,8 @@ class Partner:
         self.invuln = 0.0
         self.grace = 0.0
         self.entry = (0.0, 0.0, "N")
+        self.out = None              # what the other game says: None, "won" or "dead"
+        self.killer = None
 
     def update(self, p, cycle_tiles):
         room = p.get("room")
@@ -56,6 +63,8 @@ class Partner:
         self.facing = p.get("f", self.facing) if p.get("f") in ("N", "E", "S", "W") else self.facing
         self.moving = bool(p.get("m"))
         self.fade = bool(p.get("fade"))
+        self.out = p.get("out") if p.get("out") in ("won", "dead") else None
+        self.killer = p.get("k")
         if jump:
             self.x, self.y = self.tx, self.ty
         self.room = room
@@ -86,9 +95,11 @@ class Coop:
         self.partner = Partner(partner_char)
         self.partner_name = self.G.CHARACTERS[partner_char]
         self.other_enemies = None      # host: enemies in the partner's room when it isn't ours
+        self.p_out = None              # host: the joiner's fate as the host decided it
+        self.p_killer = None
+        self.p_lives = COOP_LIVES      # host: the joiner's hearts
         self.pickup_cd = 0.0
         self.ended = False
-        self.end_note = ""             # client: what the host did with the team score
         self.closed_reason = None
         self.cycle = game.chars[partner_char]["meta"]["cycle_tiles"]
 
@@ -97,9 +108,16 @@ class Coop:
         data["t"] = t
         self.link.send(data)
 
+    def partner_out(self):
+        """None while the other player is still in the house, else "won" / "dead"."""
+        return self.p_out if self.host else self.partner.out
+
+    def partner_killer(self):
+        return self.p_killer if self.host else self.partner.killer
+
     def partner_here(self):
         p = self.partner
-        return p.seen and p.room == self.g.room.id and not p.fade
+        return p.seen and p.room == self.g.room.id and not p.fade and self.partner_out() is None
 
     def room_objs(self, r):
         return {o.id: o for o in r.objs}
@@ -123,12 +141,12 @@ class Coop:
             self.lost(self.link.reason)
             return
         self.partner.animate(dt, self.cycle)
-        if g.mode != "play":
+        if g.mode not in ("play", "watch"):
             return
         self.pickup_cd = max(0.0, self.pickup_cd - dt)
         if self.host:
             p = self.partner
-            if p.seen and p.room != g.room.id and self.other_enemies:
+            if p.seen and p.room != g.room.id and self.other_enemies and self.p_out is None:
                 r = g.house.rooms[p.room]
                 g.run_enemies(self.other_enemies, r, [self.partner_target()], p.grace, dt, audible=False)
         else:
@@ -143,7 +161,7 @@ class Coop:
     def my_pose(self):
         g = self.g
         return {"room": g.room.id, "x": round(g.px, 3), "y": round(g.py, 3), "f": g.facing,
-                "m": bool(g.moving), "fade": bool(g.fade)}
+                "m": bool(g.moving) and g.out is None, "fade": bool(g.fade), "out": g.out, "k": g.killer if g.out == "dead" else None}
 
     def send_state(self):
         g = self.g
@@ -151,11 +169,12 @@ class Coop:
             self.send("s", p=self.my_pose())
             return
         p = self.partner
-        msg = {"p": self.my_pose(), "time": round(g.time, 2), "score": g.score, "lives": g.lives,
-               "key": [g.key_state, g.key_pos], "vis": sorted(g.visited)}
-        if p.seen and p.room in g.house.rooms:
-            r = g.house.rooms[p.room]
-            ens = g.enemies if p.room == g.room.id else (self.other_enemies or [])
+        msg = {"p": self.my_pose(), "time": round(g.time, 2), "key": [g.key_state, g.key_pos]}
+        # the room the joiner is looking at: their own, or ours while they watch us
+        rid = p.room if self.p_out is None else g.room.id
+        if p.seen and rid in g.house.rooms:
+            r = g.house.rooms[rid]
+            ens = g.enemies if rid == g.room.id else (self.other_enemies or [])
             msg["room"] = r.id
             msg["en"] = [[e.kind, round(e.x, 3), round(e.y, 3), bool(e.left), bool(e.chasing)] for e in ens]
             msg["ob"] = [[o.id, o.x, o.y, bool(o.lifted)] for o in r.objs if o.t.get("push") or o.t.get("lift")]
@@ -185,13 +204,13 @@ class Coop:
             if p.room != old_room:
                 self.partner_entered(p.room, old_room)
             return
-        # ---- client: the host's world
-        g.time = float(m.get("time", g.time))
-        g.score = int(m.get("score", g.score))
-        g.lives = int(m.get("lives", g.lives))
+        # ---- client: the host's world (the clock and the key; scores and hearts are our own)
+        if g.out is None:
+            g.time = float(m.get("time", g.time))
         ks, kp = m.get("key", [g.key_state, g.key_pos])
         g.key_state, g.key_pos = ks, (tuple(kp) if kp else None)
-        g.visited = set(m.get("vis", [])) | {g.room.id}
+        if g.mode == "watch" and p.room != g.room.id:
+            g.watch_room(p.room)
         if m.get("room") == g.room.id and not g.fade:
             self.apply_room(m.get("en", []), m.get("ob", []))
 
@@ -241,22 +260,26 @@ class Coop:
             for o in r.objs:
                 o.slide_t = 0.0
             self.other_enemies = g.make_enemies(r, p.tx, p.ty)
-        if rid not in g.visited:
-            g.visited.add(rid)
-            g.score += self.G.PTS_ROOM
-            self.send("pop", text=f"+{self.G.PTS_ROOM}")
 
     def partner_hurt(self, e):
         g = self.g
         p = self.partner
-        g.lives -= 1
+        if self.p_out is not None:
+            return
+        self.p_lives -= 1
         p.invuln = self.G.INVULN
         g.sounds.play("hurt", 0.4)
-        if g.lives <= 0:
-            g.lose(e)
+        if self.p_lives <= 0:
+            self.p_out, self.p_killer = "dead", e.kind
+            self.other_enemies = None
+            self.send("dead", kind=e.kind)
+            if g.out is None:
+                g.say(f"The {e.kind} caught {self.partner_name}! You're on your own now.")
+            self.check_end()
             return
-        g.say(f"The {e.kind} got {self.partner_name}! {g.lives} {'life' if g.lives == 1 else 'lives'} left.")
-        self.send("hurt", kind=e.kind, lives=g.lives)
+        n = self.p_lives
+        g.say(f"The {e.kind} got {self.partner_name}! {n} {'life' if n == 1 else 'lives'} left.")
+        self.send("hurt", kind=e.kind, lives=n)
         if p.room != g.room.id:
             self.other_enemies = g.make_enemies(g.house.rooms[p.room], *p.entry[:2])
             p.grace = self.G.ENTRY_GRACE
@@ -264,21 +287,17 @@ class Coop:
     def host_request(self, t, m):
         g = self.g
         p = self.partner
-        if g.mode != "play" or not p.seen:
+        if g.mode not in ("play", "watch") or not p.seen or self.p_out is not None:
             return
         r = g.house.rooms.get(m.get("room", p.room))
         if r is None or r.id != p.room:
             return
         say = lambda text: self.send("say", text=text)   # noqa: E731
-        if t == "walk":
-            n = int(m.get("n", 0))
-            if 0 < n <= 3:
-                g.add_points(n, popup=False)
-        elif t == "push":
+        if t == "push":
             o = self.room_objs(r).get(m.get("obj"))
             d = tuple(m.get("d", (0, 0)))
             if o is not None and o.t.get("push") and d in ((1, 0), (-1, 0), (0, 1), (0, -1)) and self.near(r, o):
-                g.try_push(o, d, room=r, say=say, others=[(g.px, g.py)] if r is g.room else [])
+                g.try_push(o, d, room=r, say=say, others=[(g.px, g.py)] if r is g.room and g.out is None else [])
         elif t == "lift":
             o = self.room_objs(r).get(m.get("obj"))
             if o is not None and o.t.get("lift") and self.near(r, o, 1.0):
@@ -301,14 +320,28 @@ class Coop:
         elif t == "escape":
             fd = r.front_door()
             if fd is not None and g.key_state == "carried" and p.ty < 1.2 and fd.index - 0.3 <= p.tx < fd.index + 2.3:
-                g.win(by=self.partner_name)
+                self.p_out = "won"
+                self.other_enemies = None
+                self.send("escaped", pts=self.G.PTS_ESCAPE)
+                g.sounds.play("unlock")
+                if g.out is None:
+                    g.say(f"{self.partner_name} escaped through the front door! Your turn!")
+                self.check_end()
+
+    def check_end(self):
+        """Host: once both players are out, the game is over for both."""
+        g = self.g
+        if g.out is not None and self.p_out is not None and not self.ended:
+            self.ended = True
+            self.send("end", out=g.out, k=g.killer if g.out == "dead" else None)
+            g.finish_end()
 
     def key_taken(self, text):
         g = self.g
         g.key_state = "carried"
-        g.add_points(self.G.PTS_KEY, popup=False)
         g.sounds.play("key_found")
-        g.say(f"{self.partner_name} found the front door key! Back to the Entrance Hall!")
+        if g.out is None:
+            g.say(f"{self.partner_name} found the front door key! Meet at the front door in the Entrance Hall!")
         self.send("key", text=text, pts=self.G.PTS_KEY)
 
     def announce_key(self):
@@ -325,18 +358,27 @@ class Coop:
             g.popups.append([str(m.get("text", "")), g.px, g.py, 0.0])
         elif t in ("key", "found"):
             g.sounds.play("key_found")
-            g.say(str(m.get("text", "")))
+            if g.out is None:
+                g.say(str(m.get("text", "")))
             if t == "key":
                 g.key_state = "carried"
-                g.popups.append([f"+{m.get('pts', self.G.PTS_KEY)}", g.px, g.py, 0.0])
+                g.add_points(int(m.get("pts", self.G.PTS_KEY)))
+        elif g.out is not None and t != "end":
+            return                        # we're watching: nothing more can happen to us
         elif t == "hurt":
             g.client_hurt(str(m.get("kind", "ghost")), int(m.get("lives", g.lives)))
+        elif t == "dead":
+            g.lives = 0
+            g.sounds.play(f"ow_{g.character}")
+            g.go_out("dead", str(m.get("kind", "ghost")))
+        elif t == "escaped":
+            g.add_points(int(m.get("pts", self.G.PTS_ESCAPE)))
+            g.go_out("won")
         elif t == "end":
-            g.finish_from_host(m)
-        elif t == "sent":
-            self.end_note = f"Team score sent as {m.get('name', '')}"
-        elif t == "skip":
-            self.end_note = "Team score not sent"
+            self.ended = True
+            if m.get("out") in ("won", "dead"):          # how the host got out (it may not have said yet)
+                self.partner.out, self.partner.killer = m["out"], m.get("k")
+            g.finish_end()
 
     # ---- requests from this (client) game
     def request(self, t, **data):
@@ -349,12 +391,6 @@ class Coop:
             self.request("pickup")
 
     # ---- the end, and goodbyes
-    def send_end(self, killer=None, by=None):
-        g = self.g
-        self.ended = True
-        self.send("end", won=bool(g.won), killer=killer, score=g.score, time=round(g.time, 2),
-                  visited=sorted(g.visited), lives=g.lives, by=by or self.G.CHARACTERS[g.character], entry=bool(g.entry_active))
-
     def lost(self, reason):
         """The other game went away: carry on alone (or just stay on the end screen)."""
         g = self.g
@@ -365,8 +401,9 @@ class Coop:
                 g.spawn_enemies()           # our own copy of the house takes over
                 g.grace = self.G.ENTRY_GRACE
             g.say(f"{self.partner_name} has gone ({reason.lower()}). Carrying on alone.")
-        elif g.mode == "end":
-            self.end_note = ""
+        elif g.mode == "watch":             # nobody left to watch: that's the end
+            g.net_note = f"{self.partner_name} has gone ({reason.lower()})."
+            g.finish_end()
 
     def close(self):
         self.link.close()

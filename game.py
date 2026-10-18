@@ -338,8 +338,10 @@ class Game:
         self.creak_t = 8.0
         self.won = False
         self.lost = False
-        self.opened_by = None
-        self.team_with = None             # the other player's name in a two-player game
+        self.out = None                   # two players: None, or "won" / "dead" once we're out
+        self.out_time = 0.0
+        self.net_note = ""                # two players: a line for the end screen
+        self.partner_end = None           # two players: (name, "won" / "dead" / None, killer)
         self.end_t = 0.0
         self.show_map = False
         self.paused = False
@@ -399,7 +401,7 @@ class Game:
         self.step_left = 0.0
         self.queued = None
         self.searching = None
-        if first and self.scoring and not (self.coop and self.coop.client):   # the host scores the joiner's rooms
+        if first and self.scoring:
             self.add_points(PTS_ROOM)
 
     def coop_host_enter(self, prev, shared):
@@ -416,9 +418,6 @@ class Game:
 
     def add_points(self, n, popup=True):
         """Score n points; a floating "+n" over the player for the bonuses."""
-        if self.coop is not None and self.coop.client:
-            self.coop.request("walk", n=n)   # the host keeps the team score
-            return
         self.score += n
         if popup:
             self.popups.append([f"+{n}", self.px, self.py, 0.0])
@@ -491,6 +490,10 @@ class Game:
             if key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_KP_ENTER) and self.end_t > 1.0:
                 self.to_title()
             return
+        if self.mode == "watch":          # out of the game: look, don't touch
+            if key in MAP_KEYS:
+                self.show_map = not self.show_map
+            return
         if key in MAP_KEYS:
             self.show_map = not self.show_map
         elif key == pygame.K_p:
@@ -508,11 +511,8 @@ class Game:
     def entry_text(self, text):
         if not self.entry_active:
             return
-        team = self.team_with is not None
-        limit = scores.TEAM_NAME_MAX if team else scores.NAME_MAX
         for ch in text:
-            if ch.isascii() and (ch.isalnum() or ch == " " or (ch == "+" and team)) \
-                    and len(self.entry_name) < limit:
+            if ch.isascii() and (ch.isalnum() or ch == " ") and len(self.entry_name) < scores.NAME_MAX:
                 if ch == " " and (not self.entry_name or self.entry_name.endswith(" ")):
                     continue
                 self.entry_name += ch
@@ -525,16 +525,12 @@ class Game:
             self.entry_active = False
             self.entry_note = name
             self.board.submit(name, self.score)
-            if self.coop is not None:
-                self.coop.send("sent", name=name)
             self.end_t = min(self.end_t, 0.5)
             self._stop_text()
         elif key == pygame.K_ESCAPE:
             self.entry_active = False
             self.entry_note = ""
             self._stop_text()
-            if self.coop is not None:
-                self.coop.send("skip")
         elif key == pygame.K_BACKSPACE:
             self.entry_name = self.entry_name[:-1]
 
@@ -569,8 +565,6 @@ class Game:
         self.entry_active = self.qualified
         if self.entry_active:
             self.entry_name = self.board.last_name
-            if self.team_with:
-                self.entry_name = f"{CHARACTERS[self.character]}+{self.team_with}"
             try:
                 pygame.key.start_text_input()
             except Exception:
@@ -674,8 +668,7 @@ class Game:
         self.title_pick = CHAR_ORDER.index(mine)
         self.new_game(seed)
         self.coop = C.Coop(self, link, role, theirs)
-        self.lives = self.max_lives = C.COOP_LIVES
-        self.team_with = CHARACTERS[theirs]
+        self.lives = self.max_lives = C.COOP_LIVES      # each player has their own hearts
         if role == "client":
             self.enemies = []
             self.px += 1.2                  # stand beside the host, not on top of them
@@ -683,7 +676,7 @@ class Game:
         self.mode = "play"
         self.sounds.loop("ambience")
         self.sounds.play("door")
-        self.say(f"You are {CHARACTERS[mine]}, with {CHARACTERS[theirs]}. Find the key and escape together!")
+        self.say(f"You are {CHARACTERS[mine]}, with {CHARACTERS[theirs]}. Find the key and both get out!")
 
     def client_hurt(self, kind, lives):
         """Client: the host says an enemy touched us."""
@@ -696,39 +689,87 @@ class Game:
         self.stop_controls()
         self.searching = None
 
-    def finish_from_host(self, m):
-        """Client: the host says the game is over (both escaped, or no lives left)."""
-        self.won = bool(m.get("won"))
-        self.lost = not self.won
-        self.opened_by = m.get("by")
-        self.killer = m.get("killer") or "ghost"
-        self.score = int(m.get("score", self.score))
-        self.time = float(m.get("time", self.time))
-        self.visited = set(m.get("visited", [])) | self.visited
-        self.lives = int(m.get("lives", self.lives))
-        if self.won:
-            self.key_state = "carried"
-        self.mode = "end"
-        self.end_t = 0.0
-        self.sounds.loop(None)
+    def go_out(self, how, killer=None):
+        """Two players: we escaped ("won") or were caught for the last time
+        ("dead"). Watch the other player until they are out too."""
+        if self.out is not None:
+            return
+        self.out = how
+        self.out_time = self.time
+        self.won, self.lost = how == "won", how == "dead"
+        if killer:
+            self.killer = killer
+        self.searching = None
+        self.stop_controls()
+        self.popups = [p for p in self.popups if p[0] == f"+{PTS_ESCAPE}"]
         if self.won:
             self.sounds.play("unlock")
             self.sounds.play("win")
+        else:
+            self.sounds.play("gameover")
+        cp = self.coop
+        if cp is not None and cp.partner_out() is None:
+            self.mode = "watch"
+            self.fade = None
+            name = cp.partner_name
+            self.say(f"You escaped! Watching {name}..." if self.won
+                     else f"The {self.killer} got you! Watching {name}...")
+            if cp.partner.seen and cp.partner.room != self.room.id:
+                self.watch_room(cp.partner.room)
+            if cp.host:
+                cp.check_end()
+        elif cp is not None and cp.host:
+            cp.check_end()                # both out: the end for both
+        elif cp is None:
+            self.finish_end()
+        # (a joining game waits for the host's "end")
+
+    def watch_room(self, rid):
+        """Watching: the view follows the other player into room rid."""
+        cp = self.coop
+        self.room = self.house.rooms[rid]
+        if cp is not None and cp.host:
+            if cp.other_enemies is not None:
+                self.enemies, cp.other_enemies = cp.other_enemies, None
+            else:
+                self.enemies = self.make_enemies(self.room, cp.partner.tx, cp.partner.ty)
+        else:
+            self.enemies = []             # the host sends them
+
+    def update_watch(self, dt):
+        cp = self.coop
+        for o in self.room.objs:
+            if o.slide_t > 0:
+                o.slide_t = max(0.0, o.slide_t - dt)
+        if cp is None:
+            return
+        p = cp.partner
+        if p.seen and p.room != self.room.id and not p.fade:
+            self.watch_room(p.room)
+        self.time += dt                   # the house clock (our own time stopped when we got out)
+        if cp.host and self.mode == "watch" and cp.partner_out() is None:
+            self.run_enemies(self.enemies, self.room, [cp.partner_target()], p.grace, dt)
+
+    def finish_end(self):
+        """The game is over: our own end screen and Top 10 name entry."""
+        if self.out is None:              # (only if the other game ended it oddly)
+            self.out, self.out_time, self.lost = "dead", self.time, True
+        self.time = self.out_time
+        cp = self.coop
+        if cp is not None:                # remember how the other one got on (the link may go)
+            self.partner_end = (cp.partner_name, cp.partner_out(), cp.partner_killer())
+        self.msg_t = 0.0
+        self.mode = "end"
+        self.end_t = 0.0
+        self.show_map = False
+        self.fade = None
+        self.sounds.loop(None)
+        if self.won:
             self.new_best = self.best is None or self.time < self.best
             if self.new_best:
                 self.best = self.time
                 self._save_best(self.time)
-        else:
-            self.sounds.play("gameover")
-        prev = max(self.best_score, self.board.high_score())
-        self.new_high = self.score > prev
-        self.best_score = max(prev, self.score)
-        self.board.record_local(self.score)
-        self.qualified = False
-        self.entry_active = False
-        self.entry_note = ""
-        self.coop.end_note = f"{self.coop.partner_name} is typing the team name for the Top 10..." \
-            if m.get("entry") else ""
+        self.end_scores()
 
     def end_coop(self):
         if self.coop is not None:
@@ -747,8 +788,6 @@ class Game:
         if self.entry_active:
             self.entry_active = False
             self._stop_text()
-            if self.coop is not None and self.coop.host:
-                self.coop.send("skip")
         self.end_coop()
         self.close_lobby()
         self.mode = "title"
@@ -867,6 +906,9 @@ class Game:
             return
         if self.msg_t > 0:
             self.msg_t -= dt
+        if self.mode == "watch":
+            self.update_watch(dt)
+            return
         if self.fade:
             phase, t, cb = self.fade
             t += dt
@@ -1286,10 +1328,12 @@ class Game:
             return f"under the rug in the {room.name}"
         return SEARCH_PHRASE[o.t["search"]].format(n=nice(o.type)) + f" in the {room.name}"
 
-    def win(self, by=None):
-        self.won = True
-        self.opened_by = by
+    def win(self):
         self.add_points(PTS_ESCAPE)
+        if self.coop is not None:
+            self.go_out("won")
+            return
+        self.won = True
         self.mode = "end"
         self.end_t = 0.0
         self.sounds.play("unlock")
@@ -1300,10 +1344,11 @@ class Game:
             self.best = self.time
             self._save_best(self.time)
         self.end_scores()
-        if self.coop is not None:
-            self.coop.send_end(by=by)
 
     def lose(self, e):
+        if self.coop is not None:
+            self.go_out("dead", e.kind)
+            return
         self.lost = True
         self.mode = "end"
         self.end_t = 0.0
@@ -1311,8 +1356,6 @@ class Game:
         self.sounds.play("gameover")
         self.sounds.loop(None)
         self.end_scores()
-        if self.coop is not None:
-            self.coop.send_end(killer=e.kind)
 
     # ================================================================ drawing
     def build_background(self, r):
@@ -1553,7 +1596,8 @@ class Game:
             items.append(((kx - .2, ky - .2, kx + .2, ky + .2), ("key",)))
         for e in self.enemies:
             items.append((e.box(), ("enemy", e)))
-        items.append(((self.px - PLAYER_R, self.py - PLAYER_R, self.px + PLAYER_R, self.py + PLAYER_R), ("player",)))
+        if self.out is None:   # (two players: once out, we only watch)
+            items.append(((self.px - PLAYER_R, self.py - PLAYER_R, self.px + PLAYER_R, self.py + PLAYER_R), ("player",)))
         if self.coop is not None and self.coop.partner_here():
             p = self.coop.partner
             items.append(((p.x - PLAYER_R, p.y - PLAYER_R, p.x + PLAYER_R, p.y + PLAYER_R), ("partner",)))
@@ -1562,7 +1606,8 @@ class Game:
         dark = self.dark_cache[r.id].copy()
         lx, ly = self.P(self.px, self.py, 70)
         lr = self.player_light.get_width() // 2
-        dark.blit(self.player_light, (lx - lr, ly - lr), special_flags=pygame.BLEND_RGBA_SUB)
+        if self.out is None:
+            dark.blit(self.player_light, (lx - lr, ly - lr), special_flags=pygame.BLEND_RGBA_SUB)
         if self.coop is not None and self.coop.partner_here():   # the other player carries a light too
             qx, qy = self.P(self.coop.partner.x, self.coop.partner.y, 70)
             dark.blit(self.player_light, (qx - lr, qy - lr), special_flags=pygame.BLEND_RGBA_SUB)
@@ -1586,6 +1631,8 @@ class Game:
             s.blit(gs, (kx - 40, ky - 40), special_flags=pygame.BLEND_RGB_ADD)
         self.draw_popups()
         self.draw_hud()
+        if self.mode == "watch" and self.coop is not None:
+            self.draw_watching()
         if self.show_map:
             self.draw_map()
         if self.paused:
@@ -1680,6 +1727,22 @@ class Game:
             self.draw_player_shadow(gx, gy, x0, y0, feet, meta["facings"][k])
             s.blit(img, (x0, y0))
 
+    def draw_watching(self):
+        """Out of the game: say whose view this is."""
+        s = self.screen
+        im = self.text(self.f_sub, f"Watching {self.coop.partner_name}", (190, 230, 255))
+        how = "You escaped" if self.out == "won" else f"The {self.killer} got you"
+        sub = self.text(self.f_small, f"{how}. The game ends when {self.coop.partner_name} gets out or is caught.",
+                        (200, 190, 170))
+        w = max(im.get_width(), sub.get_width()) + 40
+        panel = pygame.Surface((w, im.get_height() + sub.get_height() + 18), pygame.SRCALPHA)
+        panel.fill((10, 6, 14, 190))
+        pygame.draw.rect(panel, (90, 130, 170), panel.get_rect(), 2, border_radius=6)
+        x0, y0 = (WIN_W - w) / 2, HUD_H + 12
+        s.blit(panel, (x0, y0))
+        s.blit(im, ((WIN_W - im.get_width()) / 2, y0 + 6))
+        s.blit(sub, ((WIN_W - sub.get_width()) / 2, y0 + 10 + im.get_height()))
+
     def draw_partner(self):
         """The other player, from their reported position, facing and walking."""
         p = self.coop.partner
@@ -1700,8 +1763,6 @@ class Game:
         x0, y0 = round(gx - ax), round(gy - ay)
         self.draw_player_shadow(gx, gy, x0, y0, feet, meta["facings"][k])
         self.screen.blit(img, (x0, y0))
-        tag = self.text(self.f_small, CHARACTERS[p.char], (255, 225, 170))
-        self.screen.blit(tag, (round(gx - tag.get_width() / 2), y0 - tag.get_height() + 4))
 
     def draw_player_shadow(self, gx, gy, x0, y0, feet, fmeta):
         """Ground the figure: a soft pool where they stand, and a small dark
@@ -1747,18 +1808,28 @@ class Game:
         if self.coop is None:
             s.blit(self.text(self.f_hud, f"Score: {self.score:,}", (255, 200, 120)), (x + hearts * 32 + 30, 14))
         else:
-            s.blit(self.text(self.f_hud, f"Team score: {self.score:,}", (255, 200, 120)), (x + hearts * 32 + 24, 4))
-            p = self.coop.partner
-            where = ("here with you" if p.room == self.room.id else
-                     f"in the {self.house.rooms[p.room].name}") if p.seen else "on the way"
-            s.blit(self.text(self.f_hud_small, f"{self.coop.partner_name} is {where}", (190, 220, 200)),
+            s.blit(self.text(self.f_hud, f"Score: {self.score:,}", (255, 200, 120)), (x + hearts * 32 + 24, 4))
+            cp = self.coop
+            p = cp.partner
+            gone = cp.partner_out()
+            if gone == "won":
+                where = "has escaped!"
+            elif gone == "dead":
+                where = f"was caught by the {cp.partner_killer() or 'ghost'}"
+            elif not p.seen:
+                where = "is on the way"
+            elif p.room == self.room.id:
+                where = "is here" if self.out is not None else "is here with you"
+            else:
+                where = f"is in the {self.house.rooms[p.room].name}"
+            s.blit(self.text(self.f_hud_small, f"{cp.partner_name} {where}", (190, 220, 200)),
                    (x + hearts * 32 + 24, 31))
         r = self.room
         name = self.text(self.f_hud, r.name, (255, 236, 190))
         fl = self.text(self.f_hud_small, M.FLOOR_NAMES[r.floor], (200, 170, 130))
         s.blit(name, ((WIN_W - name.get_width()) / 2, 4))
         s.blit(fl, ((WIN_W - fl.get_width()) / 2, 31))
-        tm = self.text(self.f_hud, f"Time: {fmt_time(self.time)}", (255, 200, 120))
+        tm = self.text(self.f_hud, f"Time: {fmt_time(self.out_time if self.out else self.time)}", (255, 200, 120))
         s.blit(tm, (WIN_W - tm.get_width() - 18, 14))
         kx = WIN_W - tm.get_width() - 18 - 130
         s.blit(self.text(self.f_hud, "Key:", (255, 200, 120)), (kx, 14))
@@ -1854,25 +1925,30 @@ class Game:
         veil.fill((4, 2, 8, int(min(1.0, self.end_t / 0.6) * 205)))
         s.blit(veil, (0, 0))
         n_rooms = len(self.house.rooms)
-        label = "Team score" if self.team_with else "Score"
+        label = "Score"
         if self.new_high:
             best = (self.f_sub, f"{label}: {self.score:,}      A new best score!", (255, 210, 120))
         else:
             best = (self.f_sub, f"{label}: {self.score:,}      Best: {self.best_score:,}", (255, 210, 120))
-        team = self.team_with
-        if self.won and team:
-            by = self.opened_by
-            who = "You" if by in (None, CHARACTERS[self.character]) else by
-            lines = [(self.f_big, "You both escaped!", (255, 190, 80)),
-                     (self.f_sub, f"{who} opened the front door.      Time taken: {fmt_time(self.time)}", (255, 236, 190)),
-                     (self.f_help, f"Lives left: {self.lives}      Rooms explored: {len(self.visited)} of {n_rooms}", (230, 214, 180)),
+        friend = None                     # two players: how the other one got on
+        if self.partner_end is not None:
+            pname, how, pk = self.partner_end
+            friend = (f"{pname} escaped too!" if self.won else f"{pname} escaped!") if how == "won" \
+                else f"The {pk or 'ghost'} got {pname}." if how == "dead" else None
+        if self.net_note:
+            friend = self.net_note
+        if friend and self.won:
+            lines = [(self.f_big, "You escaped!", (255, 190, 80)),
+                     (self.f_sub, f"Time taken: {fmt_time(self.time)}      {friend}", (255, 236, 190)),
+                     (self.f_help, f"Lives left: {self.lives}      Rooms you explored: {len(self.visited)} of {n_rooms}", (230, 214, 180)),
                      (self.f_help, "A new best time!" if self.new_best else f"Best time: {fmt_time(self.best)}", (255, 210, 120)),
                      best]
-        elif team:
+        elif friend:
             lines = [(self.f_big, "Game over", (230, 70, 60)),
-                     (self.f_sub, f"The {self.killer} took your last life. The mansion keeps you both for ever...", (255, 236, 190)),
-                     (self.f_help, f"The key was {self.key_where()}.", (230, 214, 180)),
-                     (self.f_help, f"Time: {fmt_time(self.time)}      Rooms explored: {len(self.visited)} of {n_rooms}", (230, 214, 180)),
+                     (self.f_sub, f"The {self.killer} got you.      {friend}", (255, 236, 190)),
+                     (self.f_help, f"The key was {self.key_where()}." if self.key_state != "carried"
+                      else "The key had been found.", (230, 214, 180)),
+                     (self.f_help, f"Time: {fmt_time(self.time)}      Rooms you explored: {len(self.visited)} of {n_rooms}", (230, 214, 180)),
                      best]
         elif self.won:
             lines = [(self.f_big, "You escaped!", (255, 190, 80)),
@@ -1898,20 +1974,16 @@ class Game:
             panel.fill((10, 6, 14, 225))
             pygame.draw.rect(panel, (230, 130, 40), panel.get_rect(), 2, border_radius=6)
             s.blit(panel, ((WIN_W - pw) / 2, y))
-            im = self.text(self.f_help, "Your team is in the Top 10! Type the team name:" if self.team_with
-                           else "You're in the Top 10! Type your name:", (255, 236, 190))
+            im = self.text(self.f_help, "You're in the Top 10! Type your name:", (255, 236, 190))
             s.blit(im, ((WIN_W - im.get_width()) / 2, y + 14))
             caret = "_" if int(self.end_t * 2.5) % 2 == 0 else " "
             im = self.text(self.f_big, (self.entry_name + caret) if (self.entry_name or caret != " ") else " ", (255, 190, 80))
             s.blit(im, ((WIN_W - im.get_width()) / 2, y + 40))
-            hint = f"Up to {scores.TEAM_NAME_MAX} letters, numbers or +" if self.team_with else \
-                f"Up to {scores.NAME_MAX} letters or numbers"
+            hint = f"Up to {scores.NAME_MAX} letters or numbers"
             im = self.text(self.f_small, f"{hint}      Enter: send      Esc: skip", (200, 180, 150))
             s.blit(im, ((WIN_W - im.get_width()) / 2, y + ph - 28))
             return
         note = self.entry_status()
-        if not note and self.coop is not None and self.coop.client:
-            note = self.coop.end_note
         if note:
             im = self.text(self.f_help, note, (190, 215, 255))
             s.blit(im, ((WIN_W - im.get_width()) / 2, y))

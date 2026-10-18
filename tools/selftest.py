@@ -237,7 +237,7 @@ class Pilot:
         self.go_to_room(M.START_ROOM)
         fd = g.room.front_door()
         self.walk_path((fd.index, 0))
-        self.press((0, -1), lambda: g.mode == "end")
+        self.press((0, -1), lambda: g.mode != "play")   # ("watch": two players, the other is still in)
         return check(g.won, "walked into the front door with the key but did not win")
 
 

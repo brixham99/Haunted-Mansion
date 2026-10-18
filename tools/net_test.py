@@ -8,10 +8,12 @@ Checks: the joining game finds the host by discovery and joins through the
 real lobbies; both build the same house (seed, key place, furniture); each
 sees the other move (same room and different rooms); the joining player
 finds the key (by whatever the house hid it under: search, push, rug or
-floor) and the host registers it; the joining player opens the front door
-and both games end with the same team score; an enemy touching the joining
-player costs a shared life; and disconnects (a clean goodbye either way, a
-dropped connection, silence) leave the remaining player carrying on alone.
+floor) and the host registers it; each player walks out of the front door;
+and both games keep their own scores and hearts; a player who escapes or is
+caught watches the other until both are out; then each game shows its own
+end screen and name entry; disconnects (a clean goodbye either way, a
+dropped connection, silence) leave the remaining player carrying on alone,
+or end the game for a player who was watching.
 """
 import argparse
 import math
@@ -114,6 +116,42 @@ def same_house(host, cli):
           f"the joiner plays the other character ({host.character} / {cli.character})")
 
 
+def kill(games, host, cli, who):
+    """Catch one player for the last time (the host's enemies do it)."""
+    host.god = False
+    if who == "host":
+        host.lives, host.invuln, host.grace = 1, 0.0, 0.0
+        if host.coop.partner_here():
+            host.coop.partner.grace = 0.0
+        host.enemies.append(G.Enemy("ghost", host.px, host.py, host.rng))
+        wait(games, lambda: host.out is not None, 120)
+    else:
+        host.coop.p_lives = 1
+        hit_client(games, host, cli, until=lambda: cli.out is not None)
+    host.god = True
+    step(games, 5)
+
+
+def hit_client(games, host, cli, until=None):
+    cp = host.coop
+    lives = cp.p_lives
+    rid = cli.room.id
+    if host.room.id == rid:
+        ens = host.enemies
+        host.grace = 0.0
+    else:
+        if cp.other_enemies is None:
+            cp.other_enemies = []
+        ens = cp.other_enemies
+    cp.partner.grace = cp.partner.invuln = 0.0
+    host.god = False
+    ens.append(G.Enemy("ghost", cp.partner.tx, cp.partner.ty, host.rng))
+    wait(games, until or (lambda: cp.p_lives < lives), 120)
+    ens.pop()
+    host.god = True
+    step(games, 5)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--shots", default=None)
@@ -125,11 +163,12 @@ def main():
     # ---- 1. join by discovery, same house, see each other move
     host, cli, games = connect(screen, 104, PORT)
     same_house(host, cli)
-    check(host.lives == cli.lives == C.COOP_LIVES, f"shared lives {host.lives} / {cli.lives}")
+    check(host.lives == cli.lives == C.COOP_LIVES and host.max_lives == cli.max_lives == C.COOP_LIVES,
+          f"each player has their own {C.COOP_LIVES} hearts ({host.lives} / {cli.lives})")
     check(host.coop.partner_here() and cli.coop.partner_here(), "both start in the Entrance Hall and see each other")
     hx, hy = host.px, host.py
     host.facing = "N"                         # into the hall, away from the doorway behind
-    step(games, 40, [(0, 1), (0, 0)])
+    step(games, 75, [(0, 1), (0, 0)])
     step(games, 10)
     p = cli.coop.partner
     check(abs(p.tx - host.px) < 0.05 and abs(p.ty - host.py) < 0.05 and host.py < hy - 0.5,
@@ -143,32 +182,34 @@ def main():
     check(abs(q.tx - cli.px) < 0.05 and abs(q.ty - cli.py) < 0.05 and cli.px > cx + 0.3,
           f"the host sees the client walk ({q.tx:.2f},{q.ty:.2f} vs {cli.px:.2f},{cli.py:.2f})")
     check(q.moving is False, "and stop")
-    host_score = host.score
-    check(cli.score == host.score, f"one team score on both screens ({host.score} / {cli.score})")
+    check(host.score == 1 and cli.score == 0,
+          f"separate scores: the host walked over a second, the joiner half a second ({host.score} / {cli.score})")
     if args.shots:
         host.facing, cli.facing = "E", "S"
         step(games, 5)
         host.msg_t = cli.msg_t = 0
         host.draw()
-        pygame.image.save(screen, os.path.join(args.shots, "hm_net_host.png"))
+        pygame.image.save(screen, os.path.join(args.shots, "hm_net2_host.png"))
         cli.draw()
-        pygame.image.save(screen, os.path.join(args.shots, "hm_net_client.png"))
+        pygame.image.save(screen, os.path.join(args.shots, "hm_net2_client.png"))
         host.show_map = True
-    # ---- the client goes to another room: the host simulates it
+    # ---- the client goes to another room: the host simulates it; the joiner scores the room
     pc = DuoPilot(cli, host)
     other = next(d["to"] for d in cli.room.doors.values())
+    hs, cs = host.score, cli.score
     pc.step_room(other)
     step(games, 10)
     check(cli.room.id == other and host.coop.partner.room == other, f"the host knows the client is in {other}")
     check(not host.coop.partner_here() and not cli.coop.partner_here(), "different rooms: neither draws the other")
-    check(other in host.visited and host.score >= host_score + G.PTS_ROOM, "the client's new room scores 5 for the team")
+    check(other in cli.visited and other not in host.visited, "each player keeps their own discovered rooms")
+    check(cli.score >= cs + G.PTS_ROOM and host.score == hs, f"+5 to the joiner only ({cs} -> {cli.score}, host {hs} -> {host.score})")
     if args.shots:
         host.draw()
         pygame.image.save(screen, "/tmp/hm_net_map.png")
         host.show_map = False
     # ---- the client finds the key, wherever it is
     kind = host.key_place[1]
-    s0 = host.score
+    hs, cs = host.score, cli.score
     try:
         got = pc.get_key()
     except S.Stuck as e:
@@ -176,35 +217,63 @@ def main():
     step(games, 10)
     check(got and host.key_state == "carried" and cli.key_state == "carried",
           f"the client finds the key ({kind} in {host.key_place[0]}) and the host registers it ({host.key_state})")
-    check(host.score >= s0 + G.PTS_KEY, f"+50 for the team ({s0} -> {host.score})")
-    # ---- the client opens the front door: both escape
+    check(cli.score >= cs + G.PTS_KEY and host.score == hs, f"+50 to the finder only ({cs} -> {cli.score}, host {hs} -> {host.score})")
+    # ---- the client walks out of the front door: they're out, the host plays on
+    cs = cli.score
     try:
         pc.escape()
     except S.Stuck as e:
         check(False, f"client escape stuck: {e}")
-    wait(games, lambda: host.mode == "end" and cli.mode == "end", 200)
-    check(host.mode == "end" and host.won and cli.mode == "end" and cli.won, "both games end with an escape")
-    check(host.score == cli.score and host.score > 250, f"same final team score ({host.score} / {cli.score})")
-    check(cli.opened_by == G.CHARACTERS[cli.character], f"the joiner opened the door ({cli.opened_by})")
-    check(host.entry_active and host.entry_name == f"{G.CHARACTERS[host.character]}+{G.CHARACTERS[cli.character]}",
-          f"the host is offered the team name ({host.entry_name!r})")
+    wait(games, lambda: cli.mode == "watch", 200)
     step(games, 5)
-    check("typing the team name" in cli.coop.end_note, f"the joiner is told ({cli.coop.end_note!r})")
-    host.board.online = False
-    host.on_key(pygame.K_RETURN)
-    step(games, 10)
-    check(host.board.top() and host.board.top()[0][0] == host.entry_name, f"team entry saved {host.board.top()[:1]}")
-    check(cli.coop.end_note.startswith("Team score sent as"), f"joiner sees {cli.coop.end_note!r}")
+    check(cli.out == "won" and cli.mode == "watch" and host.mode == "play" and host.coop.p_out == "won",
+          f"the joiner escapes and watches; the host plays on ({cli.mode} / {host.mode})")
+    check(cli.score >= cs + G.PTS_ESCAPE and host.score == hs, f"+200 to the joiner only ({cs} -> {cli.score})")
+    check(cli.room.id == host.room.id and cli.coop.partner_here() and not host.coop.partner_here(),
+          "the watcher's view follows the host; the host no longer sees the joiner")
+    check(f"Watching {G.CHARACTERS[host.character]}" in (cli.msg or ""), f"'Watching ...' ({cli.msg!r})")
+    # the watcher can't touch anything
+    wx, wy, cs2 = cli.px, cli.py, cli.score
+    cli.on_key(pygame.K_SPACE)
+    step(games, 30, [(0, 0), (0, 1)])
+    check((cli.px, cli.py) == (wx, wy) and cli.score == cs2, "a watcher's keys do nothing")
+    # ---- now the host escapes too (the key unlocked the door for both)
+    ph = DuoPilot(host, cli)
+    hs = host.score
+    try:
+        ph.escape()
+    except S.Stuck as e:
+        check(False, f"host escape stuck: {e}")
+    wait(games, lambda: host.mode == "end" and cli.mode == "end", 200)
+    check(host.mode == "end" and host.won and cli.mode == "end" and cli.won, "both out: both games end, both escaped")
+    check(host.score >= hs + G.PTS_ESCAPE and any(t == f"+{G.PTS_ESCAPE}" for t, *_ in host.popups),
+          f"+200 to the host for walking out ({hs} -> {host.score})")
+    check(host.score != cli.score, f"own scores on the end screens ({host.score} / {cli.score})")
+    check(cli.time < host.time, f"own times: the joiner got out first ({cli.time:.1f} / {host.time:.1f})")
+    check(cli.partner_end and cli.partner_end[1] == "won" and host.partner_end and host.partner_end[1] == "won",
+          f"each end screen says the other escaped ({cli.partner_end} / {host.partner_end})")
+    # ---- each player types their own name, single-player rules
+    check(host.entry_active and cli.entry_active, "both are offered the Top 10 name entry")
+    for g, name in ((host, G.CHARACTERS[host.character]), (cli, G.CHARACTERS[cli.character])):
+        g.board.online = False
+        g.entry_name = ""
+        g.entry_text("A+B" + name + "XXXXXXXX")
+        check(g.entry_name == ("AB" + name + "XXXXXXXX")[:8], f"no '+' and at most 8 characters ({g.entry_name!r})")
+        g.entry_name = name
+        g.on_key(pygame.K_RETURN)
+        top = g.board.top()
+        check(top and (top[0][0], top[0][1]) == (name, g.score), f"{name}'s own entry with their own score ({top[:1]})")
+    step(games, 5)
     if args.shots:
         cli.draw()
         pygame.image.save(screen, "/tmp/hm_net_end_client.png")
     host.to_title()
     step(games, 20)
-    check(cli.coop is None, "end screen: the host leaving closes the joiner's link quietly")
+    check(cli.coop is None and cli.mode == "end", "end screen: the host leaving closes the joiner's link quietly")
     cli.to_title()
-    print(f"game 1: key {kind}, team score {host.score}, {pc.frames} client frames")
+    print(f"game 1: key {kind}, scores {host.score} / {cli.score}, {pc.frames} client frames")
 
-    # ---- 2. other hiding kinds, typed address; Holly hosting
+    # ---- 2. other hiding kinds, typed address, Holly hosting; deaths and watching
     for seed in (102, 106, 101):
         host, cli, games = connect(screen, seed, PORT, host_char=1, via_scan=False)
         check(host.character == "holly" and cli.character == "archie", "Holly hosts, Archie joins")
@@ -212,37 +281,86 @@ def main():
         pc = DuoPilot(cli, host)
         kind = host.key_place[1]
         try:
+            if seed == 102:
+                # the host is caught for the last time straight away and watches the joiner
+                kill(games, host, cli, "host")
+                check(host.out == "dead" and host.mode == "watch" and cli.mode == "play",
+                      f"seed {seed}: the host is out and watches ({host.mode})")
+                check(cli.coop.partner_out() == "dead" and not cli.coop.partner_here(), "the joiner no longer sees them")
+                hs = host.score
             got = pc.get_key()
             step(games, 10)
             check(got and host.key_state == "carried", f"seed {seed}: client found the key ({kind})")
+            if seed == 102:
+                check(host.room.id == cli.room.id and host.coop.partner_here(),
+                      f"the watcher's view followed the joiner to the {cli.room.name}")
+                if args.shots:
+                    host.msg_t = 0
+                    host.draw()
+                    pygame.image.save(screen, os.path.join(args.shots, "hm_net2_spectate.png"))
             if seed == 101:
-                # an enemy touches the joiner: one shared life, back to the doorway
-                host.god = False
-                lives = host.lives
-                rid = cli.room.id
-                ens = host.enemies if host.room.id == rid else host.coop.other_enemies
-                if not ens:
-                    host.coop.other_enemies = ens = host.make_enemies(cli.room, cli.px, cli.py) or \
-                        [G.Enemy("ghost", cli.px, cli.py, host.rng)]
-                host.coop.partner.grace = 0
-                host.coop.partner.invuln = 0
-                ens[0].x, ens[0].y = host.coop.partner.tx, host.coop.partner.ty
+                # an enemy touches the joiner: one of THEIR lives, back to the doorway
+                lives, hl = cli.lives, host.lives
                 ex, ey = cli.entry[:2]
-                wait(games, lambda: host.lives < lives, 60)
-                step(games, 5)
-                check(host.lives == lives - 1 and cli.lives == lives - 1, f"shared life lost ({lives} -> {host.lives}/{cli.lives})")
+                hit_client(games, host, cli)
+                check(host.coop.p_lives == lives - 1 and cli.lives == lives - 1 and host.lives == hl,
+                      f"the joiner loses one of their own lives ({lives} -> {cli.lives}; host still {host.lives})")
                 check(cli.invuln > 0 and abs(cli.px - ex) < 0.01 and abs(cli.py - ey) < 0.01, "the joiner goes back to where they came in")
-                host.god = True
-            pc.escape()
-            wait(games, lambda: host.mode == "end" and cli.mode == "end", 200)
-            check(host.won and cli.won and host.score == cli.score, f"seed {seed}: escaped together ({host.score})")
-            print(f"seed {seed}: key {kind} in {host.key_place[0]}, team score {host.score}")
+            if seed == 106:
+                # the joiner is caught for good while holding the key; then the host is caught: both out
+                kill(games, host, cli, "client")
+                check(cli.out == "dead" and cli.mode == "watch" and host.mode == "play" and cli.lives == 0,
+                      f"seed {seed}: the joiner is out and watches the host ({cli.mode})")
+                check(cli.room.id == host.room.id, "and sees the host's room")
+                kill(games, host, cli, "host")
+                wait(games, lambda: host.mode == "end" and cli.mode == "end", 200)
+                check(host.lost and cli.lost and host.mode == "end" and cli.mode == "end", "both caught: the game ends for both")
+                check(cli.partner_end == (G.CHARACTERS[host.character], "dead", "ghost") and host.partner_end[1] == "dead",
+                      f"each end screen says the other was caught ({cli.partner_end} / {host.partner_end})")
+                if args.shots:
+                    cli.end_t = 2.0
+                    cli.draw()
+                    pygame.image.save(screen, "/tmp/hm_net_end_both_caught.png")
+                check(host.entry_active == host.board.qualifies(host.score) and cli.entry_active == cli.board.qualifies(cli.score),
+                      "each gets their own name entry if they qualify")
+            else:
+                pc.escape()
+                if seed == 102:
+                    wait(games, lambda: host.mode == "end" and cli.mode == "end", 200)
+                    check(cli.won and host.lost and host.score == hs, f"seed {seed}: joiner escaped, host caught ({host.score} / {cli.score})")
+                else:
+                    wait(games, lambda: cli.mode == "watch", 200)
+                    kill(games, host, cli, "host")
+                    wait(games, lambda: host.mode == "end" and cli.mode == "end", 200)
+                    check(cli.won and host.lost, f"seed {seed}: joiner escaped, then the host was caught")
+            print(f"seed {seed}: key {kind} in {host.key_place[0]}, scores {host.score} / {cli.score}")
         except S.Stuck as e:
             check(False, f"seed {seed}: {e}")
-        host.entry_active = False
+        host.entry_active = cli.entry_active = False
         host.to_title()
         cli.to_title()
         step(games, 5)
+
+    # ---- 2b. the survivor goes away while the other watches
+    host, cli, games = connect(screen, 11, PORT, via_scan=False)
+    kill(games, host, cli, "client")
+    check(cli.mode == "watch", "the joiner is out and watching")
+    host.to_title()
+    wait([cli], lambda: cli.mode == "end", 200)
+    check(cli.mode == "end" and cli.coop is None and "has gone" in cli.net_note,
+          f"the host leaves while the joiner watches: the joiner's game ends ({cli.net_note!r})")
+    cli.entry_active = False
+    cli.to_title()
+    host, cli, games = connect(screen, 12, PORT, via_scan=False)
+    kill(games, host, cli, "host")
+    check(host.mode == "watch", "the host is out and watching")
+    cli.coop.link._shut("pulled the plug")
+    wait([host], lambda: host.mode == "end", 400)
+    check(host.mode == "end" and host.coop is None and "has gone" in host.net_note,
+          f"the joiner drops out while the host watches: the host's game ends ({host.net_note!r})")
+    host.entry_active = False
+    host.to_title()
+    cli.to_title()
 
     # ---- 3. disconnects mid-game
     host, cli, games = connect(screen, 7, PORT, via_scan=False)
