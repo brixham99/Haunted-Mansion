@@ -61,11 +61,16 @@ STYLES = {
 }
 
 
-def R(name, floor, map_pos, size, style, furn=(), wall=(), enemies=(), shape="square", safe=False):
+def R(name, floor, map_pos, size, style, furn=(), wall=(), enemies=(), shape="square", safe=False, grand=None):
     """safe: a calm room. Nothing spawns there, ever (Game.make_enemies), and
-    it plays its own gentle ambience (Game.room_ambience)."""
+    it plays its own gentle ambience (Game.room_ambience).
+    grand: the grand central staircase. dict(kind="stairs", x0, x1, y1): a
+    flight between the banisters x0..x1 rising from its foot (y1) to the back
+    wall (y 0), walked up by the player (Room.floor_z); dict(kind="well", x0,
+    x1, y0, y1): the open stairwell in a gallery floor, banistered all round
+    but for the gap where the room's stairs_down arrives."""
     return dict(name=name, floor=floor, map=map_pos, size=size, style=style,
-                furn=list(furn), wall=list(wall), enemies=list(enemies), shape=shape, safe=safe)
+                furn=list(furn), wall=list(wall), enemies=list(enemies), shape=shape, safe=safe, grand=grand)
 
 
 ROUND_RIM = 0.35    # a round room's cells count as floor when their centre is this far inside the wall
@@ -93,9 +98,12 @@ ROOMS = {
         furn=[("suit_of_armour", 1, 0, "S"), ("suit_of_armour", 6, 0, "S"), ("chair", 7, 3, "auto")],
         wall=[("painting", "N", 7), ("painting_lady", "N", 0)], enemies=["goblin"]),
     "staircase_hall": R("Staircase Hall", "ground", (2, 1), (8, 8), "hall",
-        furn=[("stairs_up", 6, 0, "S", "landing"), ("grandfather_clock", 0, 0, "S"), ("statue", 0, 7, "E"),
-              ("rug", 2, 5, "S"), ("candelabra", 0, 1, "E")],
-        wall=[("painting", "W", 5), ("painting_landscape", "N", 1)], enemies=["ghost"]),
+        # the grand staircase: a 2-tile flight up the middle to the back wall; its
+        # stairs_up link sits at the foot of the flight (you go up from the top)
+        furn=[("stairs_up", 3, 4, "S", "landing"), ("grandfather_clock", 0, 0, "S"), ("statue", 0, 7, "E"),
+              ("candelabra", 0, 1, "E"), ("potted_palm", 7, 7, "S")],
+        wall=[("painting", "W", 5), ("painting_landscape", "N", 1)], enemies=["ghost"],
+        grand=dict(kind="stairs", x0=3, x1=5, y1=6)),
     "east_corridor": R("East Corridor", "ground", (3, 1), (9, 4), "wood",
         furn=[("suit_of_armour", 7, 0, "S"), ("potted_palm", 0, 0, "S"), ("round_table", 1, 3, "S"), ("chair", 6, 3, "auto")],
         wall=[("painting", "N", 2), ("painting_lady", "N", 5), ("cobweb", "N", 8)], enemies=["skeleton"]),
@@ -155,9 +163,11 @@ ROOMS = {
         enemies=["monster"]),
     # ------------------------------------------------------------- first floor
     "landing": R("Landing", "first", (1, 1), (8, 8), "landing",
-        furn=[("stairs_down", 6, 0, "S", "staircase_hall"), ("grandfather_clock", 0, 0, "E"), ("rug", 3, 4, "S"),
+        # a gallery round the open stairwell; the stairs come up through the gap on its north side
+        furn=[("stairs_down", 3, 2, "N", "staircase_hall"), ("grandfather_clock", 0, 0, "E"),
               ("statue", 0, 7, "E"), ("potted_palm", 7, 7, "S")],
-        wall=[("painting", "N", 1), ("painting_lady", "W", 6)], enemies=["ghost"]),
+        wall=[("painting", "N", 1), ("painting_lady", "W", 6)], enemies=["ghost"],
+        grand=dict(kind="well", x0=2, x1=6, y0=2, y1=6)),
     "master_bedroom": R("Master Bedroom", "first", (1, 0), (9, 8), "bedroom",
         furn=[("bed", 1, 0, "S"), ("chest_of_drawers", 5, 0, "S"), ("wardrobe", 0, 6, "E"), ("armchair", 7, 5, "auto"),
               ("candelabra", 8, 0, "S")],
@@ -215,7 +225,7 @@ ROOMS = {
 
 # (room, side, other room); the other room's door is on the opposite side.
 DOORS = [
-    ("entrance_hall", "S", "staircase_hall"), ("entrance_hall", "W", "drawing_room"), ("entrance_hall", "E", "study"),
+    ("entrance_hall", "S", "staircase_hall", {"at_other": 6}), ("entrance_hall", "W", "drawing_room"), ("entrance_hall", "E", "study"),
     ("drawing_room", "W", "conservatory"), ("drawing_room", "S", "west_corridor"),
     ("conservatory", "S", "music_room"), ("study", "E", "library"), ("library", "S", "billiard_room"),
     ("staircase_hall", "W", "west_corridor"), ("staircase_hall", "E", "east_corridor"), ("staircase_hall", "S", "kitchen"),
@@ -316,6 +326,14 @@ class Room:
             o.mount = wdef[3] if len(wdef) > 3 else WALL_MOUNT.get(typ, WALL_MOUNT_DEFAULT)
             self.walls.append(o)
         self.safe = spec.get("safe", False)
+        self.grand = spec.get("grand")
+        g = self.grand or {}
+        self.flight = set()     # the grand staircase's tiles (walked on by the player only)
+        self.well = set()       # the open stairwell (a drop: nobody walks there)
+        if g.get("kind") == "stairs":
+            self.flight = {(x, y) for x in range(g["x0"], g["x1"]) for y in range(0, g["y1"])}
+        elif g.get("kind") == "well":
+            self.well = {(x, y) for x in range(g["x0"], g["x1"]) for y in range(g["y0"], g["y1"])}
         self.enemies = [] if self.safe else list(spec["enemies"])
 
     def aim_seat(self, o):
@@ -402,7 +420,51 @@ class Room:
             if t.get("solid") and (include_push or not t.get("push")):
                 for c in o.cells():
                     out[c] = o
+        if self.flight or self.well:
+            link = self.grand_link()
+            trig = self.trigger_cells()
+            for c in self.flight | self.well:
+                if c not in trig:
+                    out[c] = link
         return out
+
+    def grand_link(self):
+        """The link object of the grand staircase (stairs_up / stairs_down)."""
+        return next((o for o in self.objs if o.type in ("stairs_up", "stairs_down")), None)
+
+    def player_solid(self):
+        """Solid cells for the player: the grand flight is walked on (its
+        banisters are edges, Game.fence_hit), everything else as usual."""
+        out = self.solid_cells()
+        for c in self.flight:
+            out.pop(c, None)
+        return out
+
+    def grand_boxes(self):
+        """(x0, y0, x1, y1, h) blocks the grand staircase stands up in front of
+        the floor (Mansion.in_view): each row of the flight with its
+        banisters, and each side of the gallery's balustrade."""
+        g = self.grand
+        if not g:
+            return []
+        if g["kind"] == "stairs":
+            return [(g["x0"], j, g["x1"], j + 1, self.floor_z(g["x0"], j) + 80) for j in range(g["y1"])]
+        x0, x1, y0, y1 = g["x0"], g["x1"], g["y0"], g["y1"]
+        return [(x0, y0, x1, y0 + 0.1, 112), (x0, y1 - 0.1, x1, y1, 112), (x0, y0, x0 + 0.1, y1, 112), (x1 - 0.1, y0, x1, y1, 112)]
+
+    STAIR_TOP = 150      # px: height of the grand flight's top step (at the back wall)
+
+    def on_flight(self, x, y):
+        g = self.grand
+        return bool(self.flight) and g["x0"] <= x < g["x1"] and y < g["y1"]
+
+    def floor_z(self, x, y):
+        """Height of the floor under (x, y): up the grand staircase's steps."""
+        if not self.on_flight(x, y):
+            return 0.0
+        y1 = self.grand["y1"]
+        rise = self.STAIR_TOP / (2 * y1)
+        return max(0.0, min(self.STAIR_TOP, self.STAIR_TOP * (y1 - y) / y1 + rise / 2))
 
     def trigger_cells(self):
         """Floor links you walk onto (stairs down, trapdoors)."""
@@ -681,11 +743,9 @@ class Mansion:
         kx, ky = cx + 0.5, cy + 0.5
         sx, sy = (kx - ky) * hw, (kx + ky) * hh
         key = (sx - 16 - margin, sy - 44 - margin, sx + 16 + margin, sy + 4)
-        for o in room.objs:
-            h = o.t.get("h", 0)
-            if o.t["kind"] == "flat" or h <= 0:
-                continue
-            x0, y0, x1, y1 = o.x, o.y, o.x + o.gx, o.y + o.gy
+        boxes = [(o.x, o.y, o.x + o.gx, o.y + o.gy, o.t.get("h", 0)) for o in room.objs
+                 if o.t["kind"] != "flat" and o.t.get("h", 0) > 0 and not (room.grand and o is room.grand_link())]
+        for x0, y0, x1, y1, h in boxes + room.grand_boxes():
             if x1 <= cx or y1 <= cy:              # wholly behind the key's tile: drawn first
                 continue
             if not (x0 >= cx + 1 or y0 >= cy + 1):

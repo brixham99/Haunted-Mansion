@@ -29,6 +29,7 @@ import numpy as np
 import pygame
 
 import art
+import grand
 import roundroom
 import coop as C
 import mansion as M
@@ -40,6 +41,7 @@ WIN_W, WIN_H = 1280, 800
 HUD_H = 56
 HW, HH = TILE_W // 2, TILE_H // 2
 SLAB = 18                      # floor thickness shown along the open front edges
+GRAND_TOP_Y = 0.9               # up the grand staircase this far: on to the landing
 PLAYER_R = 0.24                # half-size of the player's collision box (tiles)
 PLAYER_SPEED = 3.0             # tiles per second
 # Furniture shadows: only legged pieces get one, a tight soft patch inset
@@ -975,8 +977,27 @@ class Game:
                 return False
         return True
 
+    def fence_hit(self, x, y):
+        """The grand staircase's banisters: the player's box may not straddle
+        either side of the flight (x0, x1) beside it, nor the newel posts at
+        its foot. Returns a flight cell (to report as bumped) or None."""
+        rm = self.room
+        if not rm.flight:
+            return None
+        g = rm.grand
+        r = PLAYER_R
+        if y - r >= g["y1"] + 0.04:
+            return None
+        for fx in (g["x0"], g["x1"]):
+            if x - r < fx < x + r:
+                return (g["x0"], min(g["y1"] - 1, max(0, math.floor(y))))
+        return None
+
     def box_hits(self, x, y, solid):
         """The first blocking cell overlapped by the player's box at (x, y)."""
+        f = self.fence_hit(x, y)
+        if f is not None:
+            return f
         r = PLAYER_R
         for cx in range(math.floor(x - r), math.floor(x + r - 1e-6) + 1):
             for cy in range(math.floor(y - r), math.floor(y + r - 1e-6) + 1):
@@ -1010,7 +1031,7 @@ class Game:
 
     def move_player(self, dx, dy, dt):
         """Axis-separated move with corner sliding; returns the cell bumped."""
-        solid = self.room.solid_cells()
+        solid = self.room.player_solid()
         bumped = None
         x0, y0 = self.px, self.py
         step = PLAYER_SPEED * dt * (0.7071 if (dx and dy) else 1.0)
@@ -1232,7 +1253,8 @@ class Game:
         if obj is None:
             return
         if obj.type in ("stairs_up", "ladder_up"):
-            self.take_link(obj)
+            if not r.flight:          # the grand staircase is walked up instead (check_exits)
+                self.take_link(obj)
             return
         if obj.t.get("push") and (bool(dx) != bool(dy)):
             if self.push_obj is not obj:
@@ -1411,6 +1433,8 @@ class Game:
         trig = r.trigger_cells().get((math.floor(self.px), math.floor(self.py)))
         if trig is not None:
             self.take_link(trig)
+        elif r.on_flight(self.px, self.py) and self.py < GRAND_TOP_Y:   # at the top of the grand staircase
+            self.take_link(r.grand_link())
 
     def take_link(self, obj):
         other, partner = self.house.link_target(self.room, obj)
@@ -1681,9 +1705,13 @@ class Game:
         if kind in ("boards", "planks"):
             for kk in range(r.d * 3 + 1):
                 pygame.draw.line(s, art.shade(st["f2"], 0.6), P(0, kk / 3), P(r.w, kk / 3), 1)
+        if r.grand:
+            grand.draw_background(self, s, r)       # the stairwell's drop, or the way up past the wall
         self._draw_thresholds(s, r)
         self._draw_wall(s, r, "N")
         self._draw_wall(s, r, "W")
+        if r.grand:
+            grand.draw_wall_opening(self, s, r)
         for o in r.walls:
             img = self.art.wall(o.type, o.side)
             n = T[o.type]["size"][0]
@@ -1897,10 +1925,14 @@ class Game:
             Q = lambda u, z: self.P(u, 0, z)
             pygame.draw.polygon(s, (50, 70, 120), [Q(fd.index + .1, 0), Q(fd.index + 1.9, 0), Q(fd.index + 1.9, DOOR_H - 12), Q(fd.index + .1, DOOR_H - 12)])
         for o in r.objs:   # flat floor things first
+            if r.grand and o.type in ("stairs_up", "stairs_down"):
+                continue          # drawn as the grand staircase (grand.py)
             if o.t["kind"] == "flat" or o.type in ("stairs_down", "trapdoor"):
                 self.blit_footprint("rug_lifted" if (o.t.get("lift") and o.lifted) else o.type, o, o.x, o.y)
         items = []
         for o in r.objs:
+            if r.grand and o.type in ("stairs_up", "stairs_down"):
+                continue
             if o.t["kind"] == "furniture" or o.type in ("stairs_up", "ladder_up"):
                 ox, oy = o.x, o.y
                 if o.slide_t > 0:
@@ -1916,14 +1948,19 @@ class Game:
         for e in self.enemies:
             items.append((e.box(), ("enemy", e)))
         if self.out is None:   # (two players: once out, we only watch)
-            items.append(((self.px - PLAYER_R, self.py - PLAYER_R, self.px + PLAYER_R, self.py + PLAYER_R), ("player",)))
+            items.append((grand.figure_box(r, self.px, self.py, PLAYER_R), ("player",)))
         if self.coop is not None and self.coop.partner_here():
             p = self.coop.partner
-            items.append(((p.x - PLAYER_R, p.y - PLAYER_R, p.x + PLAYER_R, p.y + PLAYER_R), ("partner",)))
-        for _, what in depth_sort(items):
+            items.append((grand.figure_box(r, p.x, p.y, PLAYER_R), ("partner",)))
+        if r.grand:
+            for i, (box, _, _) in enumerate(grand.layers(self, r)):
+                items.append((box, ("grand", i)))
+        order = depth_sort(items)
+        self.grand_fade = grand.fades(self, r, order) if r.grand else {}
+        for _, what in order:
             self.draw_item(what)
         dark = self.dark_cache[r.id].copy()
-        lx, ly = self.P(self.px, self.py, 70)
+        lx, ly = self.P(self.px, self.py, 70 + r.floor_z(self.px, self.py))
         lr = self.player_light.get_width() // 2
         if self.out is None:
             dark.blit(self.player_light, (lx - lr, ly - lr), special_flags=pygame.BLEND_RGBA_SUB)
@@ -1934,7 +1971,7 @@ class Game:
             kx, ky = self.P(*self.key_pos, 14)
             dark.blit(kl, (kx - 110, ky - 110), special_flags=pygame.BLEND_RGBA_SUB)
         if self.coop is not None and self.coop.partner_here():   # the other player carries a light too
-            qx, qy = self.P(self.coop.partner.x, self.coop.partner.y, 70)
+            qx, qy = self.P(self.coop.partner.x, self.coop.partner.y, 70 + r.floor_z(self.coop.partner.x, self.coop.partner.y))
             dark.blit(self.player_light, (qx - lr, qy - lr), special_flags=pygame.BLEND_RGBA_SUB)
         s.blit(dark, (0, 0))
         if fd is not None and self.door_t is not None:
@@ -2255,6 +2292,8 @@ class Game:
         if kind == "obj":
             _, o, x, y = what
             self.blit_footprint(o.type, o, x, y)
+        elif kind == "grand":
+            grand.draw_layer(self, self.room, what[1], self.grand_fade.get(what[1], 255))
         elif kind == "key":
             img = self.art.base("key")
             kx, ky = self.P(*self.key_pos)
@@ -2292,7 +2331,7 @@ class Game:
                 back = frac * meta["cycle_tiles"] / n
                 ddx, ddy = FACING_DIR_XY[self.facing]
                 px, py = px - back * ddx, py - back * ddy
-            gx, gy = self.P(px, py)
+            gx, gy = self.P(px, py, self.room.floor_z(self.px, self.py))
             x0, y0 = round(gx - ax), round(gy - ay)
             self.draw_player_shadow(gx, gy, x0, y0, feet, meta["facings"][k])
             s.blit(img, (x0, y0))
@@ -2356,7 +2395,7 @@ class Game:
         else:
             img = ch["stand"][k]
         ax, ay = meta["facings"][k]["anchor"]
-        gx, gy = self.P(p.x, p.y)
+        gx, gy = self.P(p.x, p.y, self.room.floor_z(p.x, p.y))
         x0, y0 = round(gx - ax), round(gy - ay)
         self.draw_player_shadow(gx, gy, x0, y0, feet, meta["facings"][k])
         self.screen.blit(img, (x0, y0))

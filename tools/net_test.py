@@ -428,6 +428,30 @@ def main():
     # on the other; the state follows across; no second swing
     host, cli, games = connect(screen, 13, PORT, via_scan=False)
     check(host.door_t is None and cli.door_t is None, "the front door starts shut")
+    # the grand staircase: the joiner sees the host up the steps, drawn at their height
+    host.enter_room("staircase_hall", None)
+    cli.enter_room("staircase_hall", None)
+    host.enemies, cli.enemies = [], []
+    host.px, host.py, cli.px, cli.py = 4.0, 3.0, 6.5, 6.5
+    wait(games, lambda: not cli.fade and not host.fade and cli.coop.partner_here()
+         and abs(cli.coop.partner.x - 4.0) < 0.05 and abs(cli.coop.partner.y - 3.0) < 0.05, 240)
+    seen = []
+    orig = cli.draw_player_shadow
+    cli.draw_player_shadow = lambda gx, gy, *a: (seen.append((gx, gy)), orig(gx, gy, *a))
+    cli.draw()
+    del cli.draw_player_shadow
+    p = cli.coop.partner
+    fx, fy = cli.P(p.x, p.y)
+    up = [fy - gy for gx, gy in seen if abs(gx - fx) < 2]
+    z = cli.room.floor_z(p.x, p.y)
+    check(up and abs(up[0] - z) < 2 and z > 60, f"the joiner draws the host up the grand staircase ({up} px, z {z:.0f})")
+    host.px, host.py = 2.5, 3.0
+    for _ in range(30):
+        host.move_player(1, 0, DT)
+    check(host.px <= 3 - G.PLAYER_R + 1e-3, f"and its banisters stop either player ({host.px:.2f})")
+    host.enter_room("entrance_hall", None)
+    cli.enter_room("entrance_hall", None)
+    wait(games, lambda: not cli.fade and not host.fade, 60)
     cli.enter_room("drawing_room", ("door", "E", 0))
     wait(games, lambda: not cli.fade and host.coop.partner.room == "drawing_room", 120)
     step(games, 5)

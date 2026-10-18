@@ -43,6 +43,7 @@ import pygame  # noqa: E402
 import game as G  # noqa: E402
 import mansion as M  # noqa: E402
 import art  # noqa: E402
+import grand  # noqa: E402
 import roundroom  # noqa: E402
 
 HW, HH = G.HW, G.HH
@@ -138,11 +139,20 @@ def render_room(g, r):
                           [P(-t, r.d, CUT_H), P(-t, -t, CUT_H), P(r.w, -t, CUT_H)], 2)
     # furniture, as Game.draw does it (flat things first, then depth-sorted)
     g.room, g.screen = r, surf
+    if r.grand:     # the grand staircase / gallery layers (grand.py); the drop and opening are in bg
+        g.__dict__.pop("grand_cache", None)
     for o in r.objs:
+        if r.grand and o.type in ("stairs_up", "stairs_down"):
+            continue
         if o.t["kind"] == "flat" or o.type in ("stairs_down", "trapdoor"):
             g.blit_footprint(o.type, o, o.x, o.y)
     items = []
+    if r.grand:
+        items += [(box, ("grand", i)) for i, (box, _, _) in enumerate(grand.layers(g, r))]
+        g.grand_fade = {}
     for o in r.objs:
+        if r.grand and o.type in ("stairs_up", "stairs_down"):
+            continue
         if o.t["kind"] == "furniture" or o.type in ("stairs_up", "ladder_up"):
             if o.t["kind"] == "furniture":
                 g.draw_floor_shadow(o, o.x, o.y)

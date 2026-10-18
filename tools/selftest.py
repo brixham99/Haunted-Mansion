@@ -580,6 +580,99 @@ def kitchen_checks(house):
     print(f"kitchen: island at {isl[0].cells()}, range-dresser gap {gap}, {len(opens)} open key tiles")
 
 
+def grand_stairs_checks(g):
+    """The grand staircase: walked up from the hall's floor to the top, where
+    it leads on to the Landing; banisters you can't pass through; a gallery
+    round an open stairwell nobody can walk into; no key, baddie or path on
+    the stairs or in the drop; the banisters fade in front of the player."""
+    import grand
+    h = g.house
+    hall, land = h.rooms["staircase_hall"], h.rooms["landing"]
+    solid, psolid = hall.solid_cells(), hall.player_solid()
+    check(hall.flight and all(c in solid for c in hall.flight), f"the flight is solid to baddies, pushing and the key ({len(hall.flight)} tiles)")
+    check(not any(c in psolid for c in hall.flight), "but the player walks on it")
+    trig = land.trigger_cells()
+    lsolid = land.solid_cells()
+    check(land.well and all((c in lsolid) != (c in trig) for c in land.well),
+          f"the stairwell is solid, but for the top of the stairs in the gap ({sorted(trig)})")
+    for r in (hall, land):
+        doors = [c for side in "NSEW" for c in r.door_cells(side)]
+        reach = r.flood(doors[0])
+        check(all(c in reach for c in doors), f"{r.name}: every doorway reaches every other round the stairs")
+        link = r.grand_link()
+        ex, ey = link.exit_pos()
+        check((int(ex), int(ey)) in reach, f"{r.name}: the stairs' end is reachable ({ex}, {ey})")
+        bad = [p for p in h.open_places() if p[0] == r.id and tuple(p[2]) in (r.flight | r.well)]
+        check(not bad, f"{r.name}: the key never turns up on the stairs or in the drop {bad[:3]}")
+        free = set(r.free_floor())
+        check(not (free & (r.flight | r.well)), f"{r.name}: no free floor (baddie spawns) on the stairs or in the drop")
+    p = hall.path((1, 6), (6, 6))
+    check(p is not None and not (set(p) & hall.flight), f"baddies path round the foot of the stairs ({len(p or [])} tiles)")
+    p = land.path((1, 3), (6, 4))
+    check(p is not None and not (set(p) & land.well), f"and round the gallery ({len(p or [])} tiles)")
+    # heights: up the steps to the top, flat floor off them
+    zs = [hall.floor_z(4.0, 6.0 - k * 0.25) for k in range(1, 24)]
+    check(all(b >= a for a, b in zip(zs, zs[1:])) and zs[-1] >= hall.STAIR_TOP * 0.8 and hall.floor_z(2.5, 3) == 0
+          and hall.floor_z(4.0, 6.2) == 0, f"the steps rise to the top ({zs[0]:.0f} -> {zs[-1]:.0f} px), the floor beside them is flat")
+    # walking: banisters stop you both ways, then up the stairs to the Landing
+    god = g.god
+    g.god = True
+    g.enter_room("staircase_hall", None)
+    g.enemies, g.fade = [], None
+    g.px, g.py = 2.5, 3.0
+    for _ in range(60):
+        g.move_player(1, 0, DT)
+    check(g.px <= 3 - G.PLAYER_R + 1e-3, f"the banister stops you climbing on from the side ({g.px:.2f})")
+    g.px, g.py = 4.0, 3.0
+    for _ in range(60):
+        g.move_player(-1, 0, DT)
+    check(g.px >= 3 + G.PLAYER_R - 1e-3, f"and stepping off the side of the flight ({g.px:.2f})")
+    g.px, g.py = 2.85, 6.6
+    for _ in range(40):
+        g.move_player(0, -1, DT)
+    check(g.py >= 6.0, f"the newel posts stand at the foot ({g.py:.2f})")
+    g.px, g.py, g.facing = 4.0, 6.6, "N"
+    zs, n = [], 0
+    while g.room is hall and n < 400:
+        g.update(DT, ctrl=g.steer((0, -1), False))
+        zs.append(hall.floor_z(g.px, g.py))
+        n += 1
+    check(g.room is land, f"up the grand staircase to the Landing ({n} frames)")
+    check(max(zs) >= hall.STAIR_TOP * 0.8, f"climbing all the way up ({max(zs):.0f} px)")
+    for _ in range(40):
+        g.update(DT)
+    check(abs(g.px - 4.0) < 0.6 and g.py < 2.0 and g.facing == "N", f"arriving on the gallery by the gap ({g.px:.2f}, {g.py:.2f})")
+    # the gallery: the drop stops you; the gap takes you back down
+    g.px, g.py = 1.5, 4.0
+    for _ in range(60):
+        g.move_player(1, 0, DT)
+    check(g.px <= 2 - G.PLAYER_R + 1e-3, f"the banister keeps you out of the stairwell ({g.px:.2f})")
+    # the banister in front of you fades; nothing fades when you're in the open
+    g.px, g.py = 2.6, 1.7
+    g.draw()
+    check(any(a < 255 for a in g.grand_fade.values()), f"the banister in front of you fades ({len(g.grand_fade)} layers)")
+    g.px, g.py = 6.6, 6.6
+    g.draw()
+    check(not g.grand_fade, "and not when nobody is behind it")
+    # depth: on the flight, drawn over the row underfoot and under the rows below
+    box = grand.figure_box(hall, 4.0, 3.3, G.PLAYER_R)
+    order = G.depth_sort([((3, 3, 5, 4), "row3"), ((3, 4, 5, 5), "row4"), (box, "me")])
+    check([w for _, w in order] == ["row3", "me", "row4"], f"on the stairs: the step underfoot behind, the lower steps in front {[w for _, w in order]}")
+    g.px, g.py, g.fade = 4.0, 1.5, None
+    g.facing = "S"
+    n = 0
+    while g.room is land and n < 200:
+        g.update(DT, ctrl=g.steer((0, 1), False))
+        n += 1
+    check(g.room is hall, f"down through the gap to the Staircase Hall ({n} frames)")
+    for _ in range(40):
+        g.update(DT)
+    check(not hall.on_flight(g.px, g.py) and g.py > 6.0, f"arriving at the foot of the stairs ({g.px:.2f}, {g.py:.2f})")
+    g.god = god
+    print(f"grand stairs: flight {len(hall.flight)} tiles up to {hall.STAIR_TOP} px, well {len(land.well)} tiles, "
+          f"{len(grand.layers(g, hall))}+{len(grand.layers(g, land))} layers")
+
+
 def vampire_checks(g):
     """The Crypt's vampire: a floater, animated, hovering, with a soft shadow that shrinks with height."""
     import numpy as np
@@ -811,6 +904,7 @@ def main():
     kitchen_checks(g.house)
     safe_room_checks(g)
     vampire_checks(g)
+    grand_stairs_checks(g)
     # ---- full tour with enemies (invulnerable)
     if not args.quick:
         g.new_game(1)
