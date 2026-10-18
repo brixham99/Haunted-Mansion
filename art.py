@@ -1038,6 +1038,21 @@ def wall_shear(img, side, squeeze=True):
     return out
 
 
+# Animated enemies: enemy kind -> frame set written by tools/cut_anims.py
+# (assets/art/<set>_<n>.png and anims.json with the in-game size and anchor).
+# Painted facing screen right like every enemy; mirrored for screen left.
+ENEMY_ANIMS = {"bat": "bat", "skeleton": "skeleton_walk"}
+
+
+def load_anims():
+    import json
+    try:
+        with open(os.path.join(ART_DIR, "anims.json")) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 class Art:
     """Cache of every sprite in both facings."""
 
@@ -1088,6 +1103,32 @@ class Art:
         key = (name, "wall", side)
         if key not in self.cache:
             self.cache[key] = wall_shear(self.base(name), side)
+        return self.cache[key]
+
+    def enemy_frame(self, kind, i, left):
+        """(image, anchor x, anchor y) of frame i (0-based) of kind's
+        animation, mirrored when left, or None if it has none. The anchor is
+        the bat's body centre or the skeleton's feet, in image pixels."""
+        key = ("anim", kind, i, left)
+        if key not in self.cache:
+            if not hasattr(self, "anims"):
+                self.anims = load_anims()
+            name = ENEMY_ANIMS.get(kind)
+            meta = self.anims.get(name) if name else None
+            val = None
+            if meta:
+                path = os.path.join(ART_DIR, f"{name}_{i % meta['frames'] + 1}.png")
+                try:
+                    img = pygame.image.load(path)
+                    img = img.convert_alpha() if pygame.display.get_surface() else img
+                    img = pygame.transform.smoothscale(img, tuple(meta["size"]))
+                    ax, ay = meta["anchor"]
+                    if left:
+                        img, ax = pygame.transform.flip(img, True, False), img.get_width() - ax
+                    val = (img, ax, ay)
+                except Exception:
+                    val = None
+            self.cache[key] = val
         return self.cache[key]
 
     def enemy(self, name, left):

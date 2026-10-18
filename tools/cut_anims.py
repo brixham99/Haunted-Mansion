@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+"""Cut the enemy animation sheets into aligned frames.
+
+    python3 tools/cut_anims.py [--strips DIR]   # DIR: also write frame strips for review
+
+Sheets (tools/art/sheets/, white background, four frames left to right):
+  bat_flap.jpg       wings up, wings outstretched, wings down, wings folded
+  skeleton_walk.jpg  stride, legs together, other stride, jolt
+
+Background and soft edges use the same cutter as cut_sheets.py (border
+flood fill, enclosed flat-white pockets such as the gaps between the bat's
+wing fingers and between the skeleton's bones/legs/coat tatters count as
+background, soft alpha with the white unmixed), then defringe(): the rim
+takes the colour of the paint just inside it, so JPEG ringing leaves no
+pale dotted outline on the dark floors, and one-pixel specks are dropped.
+
+Alignment, on one canvas per set (every frame the same size; anims.json
+records the anchor point in in-game pixels):
+  bat:      the body centre (the red eyes, a little lower) fixed in all frames
+  skeleton: the boot soles on one ground line; the upper body (hat, skull,
+            chest) centred horizontally
+
+Writes assets/art/<set>_<n>.png (n = 1..4) and assets/art/anims.json with
+the canvas size each set is drawn at in the game, chosen so that the sprite
+matches the old single image: the bat's outstretched frame as wide as the
+old bat (108 px), the skeleton's legs-together frame as tall as the old
+skeleton (165 px).
+"""
+import json
+import os
+import sys
+
+import numpy as np
+from PIL import Image, ImageDraw
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import cut_sheets as CS  # noqa: E402
+
+OUT = CS.OUT
+SETS = {
+    # name: (sheet, reference frame index, ("w" | "h", in-game px of the reference frame))
+    "bat": ("bat_flap.jpg", 1, ("w", 108)),
+    "skeleton_walk": ("skeleton_walk.jpg", 1, ("h", 165)),
+}
+HOLE_FLAT = 0.2            # the gaps between bones, coat and arm, wing fingers: small pockets of noisy JPEG white
+PAD = 6
+
+
+def cut_frames(sheet):
+    rgb = np.asarray(Image.open(os.path.join(CS.SHEETS, sheet)).convert("RGB")).astype(np.float64)
+    bg, d = CS.background(rgb, HOLE_FLAT)
+    fg = ~bg
+    names = [f"f{i}" for i in range(4)]
+    frames = []
+    for _name, box, mask in CS.find_items(fg, [names]):
+        img = defringe(CS.cut_item(rgb, d, mask, box))
+        frames.append(CS.harmonise(img))
+    return frames
+
+
+def box_sum(x, r):
+    c = np.pad(x, ((r + 1, r), (r + 1, r)) + ((0, 0),) * (x.ndim - 2)).cumsum(0).cumsum(1)
+    k = 2 * r + 1
+    return c[k:, k:] - c[:-k, k:] - c[k:, :-k] + c[:-k, :-k]
+
+
+def defringe(img, r=2):
+    """Clean the cut edge. JPEG ringing leaves the outermost pixels lighter
+    than the paint just inside, which shows as a pale dotted outline on the
+    dark floors. Every pixel on the rim (within a pixel of transparency)
+    that is lighter than the solid paint behind it takes that paint's
+    colour, and the faint fringe is thinned a little."""
+    a = np.asarray(img).astype(np.float64)
+    rgb, al = a[..., :3], a[..., 3] / 255.0
+    clear = (al < 0.5).astype(np.float64)
+    rim = (al > 0) & (box_sum(clear, 1) > 0)
+    inner = ((al >= 0.9) & ~rim).astype(np.float64)
+    ws = box_sum(inner, r)
+    cs = box_sum(rgb * inner[..., None], r)
+    fix = rim & (ws > 0)
+    paint = cs[fix] / ws[fix][:, None]
+    lum = lambda c: c @ np.array([0.3, 0.59, 0.11])
+    lighter = lum(rgb[fix]) > lum(paint)
+    sub = rgb[fix]
+    sub[lighter] = paint[lighter]
+    rgb[fix] = sub
+    soft = (al > 0) & (al < 0.9)
+    al[soft] = al[soft] ** 1.35
+    al[soft & (ws == 0)] *= 0.5                      # lone faint pixels
+    specks = (al > 0) & (box_sum((al > 0.3).astype(np.float64), 1) <= 3)
+    al[specks] = 0.0                                 # one-pixel JPEG specks off the edge
+    out = np.concatenate([rgb, al[..., None] * 255.0], axis=2)
+    return Image.fromarray(np.clip(out + 0.5, 0, 255).astype(np.uint8), "RGBA")
+
+
+def eye_centre(img):
+    a = np.asarray(img).astype(np.float64)
+    r, g, b, al = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
+    red = (al > 200) & (r > 150) & (r > 2.2 * g) & (r > 2.2 * b)
+    ys, xs = np.nonzero(red)
+    if len(xs) < 3:
+        raise ValueError("no red eyes found")
+    return xs.mean(), ys.mean()
+
+
+def upper_centre_and_feet(img):
+    al = np.asarray(img)[..., 3] > 128
+    ys, xs = np.nonzero(al)
+    top, bot = ys.min(), ys.max()
+    upper = al[top:top + int((bot - top) * 0.45)]
+    uy, ux = np.nonzero(upper)
+    return ux.mean(), bot
+
+
+def align(name, frames):
+    """Anchors -> one canvas; returns the frames on it and the anchor point
+    on that canvas (the bat's body centre, the skeleton's feet)."""
+    if name == "bat":
+        anchors = []
+        for f in frames:
+            ex, ey = eye_centre(f)
+            anchors.append((ex, ey + 18))          # the body centre, a little below the eyes
+    else:
+        anchors = [upper_centre_and_feet(f) for f in frames]
+    left = max(ax for ax, _ in anchors)
+    right = max(f.width - ax for f, (ax, _) in zip(frames, anchors))
+    up = max(ay for _, ay in anchors)
+    down = max(f.height - ay for f, (_, ay) in zip(frames, anchors))
+    W, H = int(np.ceil(left + right)) + 2 * PAD, int(np.ceil(up + down)) + 2 * PAD
+    if name != "bat":
+        H = int(np.ceil(up)) + 2 * PAD          # feet (the anchor) on the bottom edge, less the pad
+    out = []
+    anchor = (PAD + left, (PAD + up) if name == "bat" else H - PAD)
+    for f, (ax, ay) in zip(frames, anchors):
+        c = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        c.alpha_composite(f, (int(round(PAD + left - ax)), int(round(PAD + up - ay))))
+        out.append(c)
+    return out, anchor
+
+
+def main(argv):
+    strips = argv[argv.index("--strips") + 1] if "--strips" in argv else None
+    meta = {}
+    for name, (sheet, ref, (dim, px)) in SETS.items():
+        frames, anchor = align(name, cut_frames(sheet))
+        bb = frames[ref].split()[3].getbbox()
+        ref_px = (bb[2] - bb[0]) if dim == "w" else (bb[3] - bb[1])
+        k = px / ref_px
+        W, H = frames[0].size
+        size = [max(1, round(W * k)), max(1, round(H * k))]
+        for i, f in enumerate(frames):
+            f.save(os.path.join(OUT, f"{name}_{i + 1}.png"))
+        meta[name] = {"frames": len(frames), "size": size, "sheet": sheet,
+                      # in-game px from the top-left: the bat's body centre, the skeleton's feet
+                      "anchor": [round(anchor[0] * k, 1), round(anchor[1] * k, 1)]}
+        print(f"{name}: {len(frames)} frames, canvas {W}x{H} -> in game {size[0]}x{size[1]}")
+        if strips:
+            strip(name, frames, size, anchor, os.path.join(strips, f"{name}_strip.png"))
+    with open(os.path.join(OUT, "anims.json"), "w") as fh:
+        json.dump(meta, fh, indent=1)
+
+
+LABELS = {"bat": ("1 wings up", "2 outstretched", "3 wings down", "4 folded"),
+          "skeleton_walk": ("1 stride", "2 legs together", "3 other stride", "4 jolt")}
+
+
+def strip(name, frames, size, anchor, path):
+    """Review strip: each frame at twice its in-game size, on a dark and a
+    light floor, with a guide through the anchor (the bat's body centre,
+    the skeleton's ground line) and the frame names."""
+    k = 2 * size[0] / frames[0].width
+    ax, ay = anchor[0] * k, anchor[1] * k
+    cells = []
+    for i, f in enumerate(frames):
+        g = f.resize((size[0] * 2, size[1] * 2), Image.LANCZOS)
+        cell = Image.new("RGB", (g.width + 20, g.height * 2 + 52), (40, 34, 44))
+        dr = ImageDraw.Draw(cell)
+        dr.rectangle([0, g.height + 15, cell.width, g.height * 2 + 30], fill=(200, 196, 186))
+        for y0 in (5, g.height + 20):
+            dr.line([(0, y0 + ay), (cell.width, y0 + ay)], fill=(0, 170, 230), width=1)
+            dr.line([(10 + ax, y0), (10 + ax, y0 + g.height)], fill=(0, 170, 230), width=1)
+        cell.paste(g, (10, 5), g)
+        cell.paste(g, (10, g.height + 20), g)
+        dr.text((10, g.height * 2 + 36), LABELS.get(name, ("",) * 4)[i], fill=(230, 225, 215))
+        cells.append(cell)
+    W = sum(c.width for c in cells)
+    out = Image.new("RGB", (W, cells[0].height), (40, 34, 44))
+    x = 0
+    for c in cells:
+        out.paste(c, (x, 0))
+        x += c.width
+    out.save(path)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

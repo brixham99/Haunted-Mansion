@@ -2,6 +2,7 @@
 """Synthesise Haunted Mansion's spooky sounds (22050 Hz, 16-bit mono WAV).
 
     python3 tools/make_sounds.py            # writes assets/sounds/*.wav
+    python3 tools/make_sounds.py NAME ...   # just those (e.g. skel_clack1 skel_clack2 bat_flap)
 
 Pure numpy, no samples. step1-3 and ow_archie/ow_holly are copied from
 Daleks in Hedges and are not regenerated here.
@@ -368,6 +369,40 @@ def make_door_creak():
     return out
 
 
+def make_skel_clack(seed, f0):
+    """One bony footfall (~0.25 s): a dry knock of inharmonic bone modes,
+    the boot's dull thud under it and a short loose rattle after."""
+    r = np.random.default_rng(seed)          # its own generator: the others' noise is unchanged
+    out = np.zeros(int(0.26 * SR))
+    t = t_(0.09)
+    knock = sum(a * np.sin(2 * np.pi * f0 * m * t + r.random() * 6.28) * np.exp(-t * k)
+                for m, a, k in ((1.0, 1.0, 55), (1.71, 0.6, 75), (2.93, 0.35, 110), (4.4, 0.2, 150)))
+    out[:len(t)] += knock
+    thud = np.sin(2 * np.pi * 120 * t * (1 - 0.6 * t)) * np.exp(-t * 45) * 0.7
+    out[:len(t)] += thud
+    for k in range(5):                        # the rattle: smaller, higher, tailing off
+        tt = t_(0.035)
+        f = f0 * r.uniform(1.4, 2.6)
+        c = np.sin(2 * np.pi * f * tt) * np.exp(-tt * 140) * (0.45 * 0.7 ** k)
+        i = int((0.03 + 0.028 * k + r.uniform(0, 0.012)) * SR)
+        out[i:i + len(c)] += c
+    out += bp_fast(r.standard_normal(len(out)), 1500, 6000) * 0.06 * np.exp(-t_(0.26)[:len(out)] * 30)
+    return out * env(len(out), 0.001, 0.05)
+
+
+def make_bat_flap():
+    """A soft leathery wing beat (~0.2 s): a swell of band-passed air with a
+    little papery snap at the bottom of the stroke."""
+    r = np.random.default_rng(77)
+    n = int(0.2 * SR)
+    t = t_(0.2)[:n]
+    swell = np.clip(t / 0.05, 0, 1) ** 1.5 * np.exp(-np.clip(t - 0.05, 0, None) * 28)
+    air = bp_fast(r.standard_normal(n), 220, 1600) * swell
+    snap = bp_fast(r.standard_normal(n), 900, 4000) * np.exp(-np.abs(t - 0.055) * 160) * 0.5
+    whomp = np.sin(2 * np.pi * 85 * t) * swell * 0.35
+    return (air + snap + whomp) * env(n, 0.002, 0.04)
+
+
 MAKERS = {
     "title_theme": (make_title_theme, 0.7), "ambience": (make_ambience, 0.7),
     "creak1": (lambda: make_creak(1, 18), 0.6), "creak2": (lambda: make_creak(2, 11), 0.6),
@@ -378,6 +413,8 @@ MAKERS = {
     "skeleton": (make_skeleton, 0.6), "monster": (make_monster, 0.75), "stairs": (make_stairs, 0.6),
     "rug": (make_rug, 0.5), "hurt": (make_hurt_sting, 0.6),
     "door_creak": (make_door_creak, 0.85),
+    "skel_clack1": (lambda: make_skel_clack(5, 1250), 0.7), "skel_clack2": (lambda: make_skel_clack(9, 1080), 0.7),
+    "bat_flap": (make_bat_flap, 0.6),
 }
 
 

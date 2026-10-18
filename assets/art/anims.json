@@ -1,0 +1,26 @@
+{
+ "bat": {
+  "frames": 4,
+  "size": [
+   111,
+   98
+  ],
+  "sheet": "bat_flap.jpg",
+  "anchor": [
+   54.8,
+   50.8
+  ]
+ },
+ "skeleton_walk": {
+  "frames": 4,
+  "size": [
+   107,
+   168
+  ],
+  "sheet": "skeleton_walk.jpg",
+  "anchor": [
+   61.4,
+   166.6
+  ]
+ }
+}

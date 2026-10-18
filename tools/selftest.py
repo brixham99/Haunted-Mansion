@@ -395,6 +395,47 @@ def walk_checks(g):
           f"turns {G.TURN_S}s each")
 
 
+def anim_checks(g):
+    """The bat's wing beat and the skeleton's distance-driven walk."""
+    g.new_game(1)
+    g.mode = "play"
+    for kind, n in (("bat", 4), ("skeleton", 4)):
+        for left in (False, True):
+            fr = [g.art.enemy_frame(kind, i, left) for i in range(n)]
+            check(all(f is not None for f in fr), f"{kind}: {n} animation frames ({'left' if left else 'right'})")
+            check(len({f[0].get_size() for f in fr if f}) == 1, f"{kind}: every frame the same size")
+    img, ax, ay = g.art.enemy_frame("skeleton", 1, False)
+    img2, ax2, _ = g.art.enemy_frame("skeleton", 1, True)
+    check(abs((ax + ax2) - img.get_width()) < 1e-6, "mirrored for screen left about the same anchor")
+    check(abs(img.get_height() - 168) <= 4 and abs(g.art.enemy_frame("bat", 1, False)[0].get_width() - 111) <= 4,
+          "frames at the in-game sizes of the old sprites")
+    g.enemies = [G.Enemy("bat", 3.0, 3.0, g.rng), G.Enemy("skeleton", 2.0, 2.0, g.rng)]
+    bat, sk = g.enemies
+    bat.phase, frames = 0.0, []
+    for _ in range(60):
+        bat.phase += DT
+        g.animate_enemies(DT)
+        frames.append(bat.frame)
+    flips = sum(1 for a, b in zip(frames, frames[1:]) if a != b)
+    check(8 <= flips <= 10, f"the bat flaps at {flips} frames a second (want 8-10)")
+    req = lambda: sum(g.sounds.requested.get(f"skel_clack{i}", 0) for i in (1, 2))
+    g.px, g.py = 2.0, 4.0
+    c0, seen, walked = req(), [], 0.0
+    for _ in range(120):                      # 1.2 tiles at 0.6 tiles/s
+        sk.x += 0.6 * DT
+        walked += 0.6 * DT
+        g.animate_enemies(DT)
+        seen.append(sk.frame)
+    changes = sum(1 for a, b in zip(seen, seen[1:]) if a != b)
+    check(abs(changes - walked / G.SKEL_FRAME_D) <= 1, f"skeleton frames follow distance ({changes} over {walked:.2f} tiles)")
+    falls = sum(1 for a, b in zip(seen, seen[1:]) if a != b and b in (0, 2))
+    check(req() - c0 == falls and falls >= 1, f"a clack on every footfall ({req() - c0} / {falls})")
+    for _ in range(30):
+        g.animate_enemies(DT)
+    check(sk.frame == 1, "standing still: the legs-together frame")
+    print(f"anims: bat {flips} frames/s, skeleton {changes} frames over {walked:.2f} tiles, {falls} footfalls")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true")
@@ -409,6 +450,7 @@ def main():
     if args.shots:
         os.makedirs(args.shots, exist_ok=True)
     walk_checks(g)
+    anim_checks(g)
     # ---- full tour with enemies (invulnerable)
     if not args.quick:
         g.new_game(1)

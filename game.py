@@ -43,6 +43,16 @@ PLAYER_R = 0.24                # half-size of the player's collision box (tiles)
 PLAYER_SPEED = 3.0             # tiles per second
 ENEMY_SPEED_SCALE = 0.6        # every baddie's speed (ENEMY_STATS, wander and chase) times this; 1.0 = original
 ENEMY_BOB_RATE = 8.0 * ENEMY_SPEED_SCALE ** 0.5   # walkers' step bob follows their (slower) pace
+# Animated enemies (frames cut by tools/cut_anims.py; art.ENEMY_ANIMS). Like
+# every enemy sprite they are painted facing screen right and mirrored when
+# the enemy heads screen left (e.left); there are no separate up/down views.
+BAT_FPS = 9.0                  # wing beat: up, outstretched, down, folded, looped
+BAT_BOB = 3.0                  # px; the body rises on the downstroke, in step with the frames
+BAT_FLAP_NEAR = 3.5            # tiles: the leathery flap is only heard this close
+SKEL_FRAME_D = 0.3             # tiles walked per frame (stride, together, other stride, jolt): no foot slide
+SKEL_IDLE_S = 0.3              # standing this long -> the legs-together frame
+SKEL_JOLT_S = 0.1              # the 1-2 px drop on each footfall
+SKEL_CLACK_FAR = 9.0           # tiles: the footfall clack fades out by this distance
 # The front door: once the key is carried and someone is in the Entrance Hall
 # it swings open (both leaves, inwards on their outer hinges) and stays open.
 DOOR_OPEN_S = 1.8              # length of the swing
@@ -97,7 +107,8 @@ SOUND_VOL = {"door_creak": 0.85, "ambience": 0.35, "title_theme": 0.5, "creak1":
              "search": 0.5, "key_found": 0.7, "locked": 0.6, "unlock": 0.8, "win": 0.7, "gameover": 0.7,
              "push": 0.5, "ghost": 0.45, "goblin": 0.5, "bat": 0.35, "spider": 0.4, "skeleton": 0.5,
              "monster": 0.6, "stairs": 0.5, "rug": 0.5, "hurt": 0.5, "step1": 0.25, "step2": 0.25,
-             "step3": 0.25, "ow_archie": 0.5, "ow_holly": 0.5}
+             "step3": 0.25, "ow_archie": 0.5, "ow_holly": 0.5, "skel_clack1": 0.3, "skel_clack2": 0.3,
+             "bat_flap": 0.22}
 
 
 def load_font(size, bold=False, serif=False):
@@ -191,6 +202,14 @@ class Enemy:
         self.phase = rng.uniform(0, 6.28)
         self.wander = None
         self.rng = rng
+        # animation (game.animate_enemies; runs on both sides of a two-player game)
+        self.frame = 1                  # skeleton: legs together; bat: wings out
+        self.anim_xy = None             # where it was last frame (walk distance)
+        self.walk_d = 1.5 * SKEL_FRAME_D
+        self.still = SKEL_IDLE_S
+        self.jolt = 0.0
+        self.foot = 0
+        self.flap_cd = 1.0
 
     def box(self):
         return (self.x - self.r, self.y - self.r, self.x + self.r, self.y + self.r)
@@ -764,6 +783,7 @@ class Game:
         self.time += dt                   # the house clock (our own time stopped when we got out)
         if cp.host and self.mode == "watch" and cp.partner_out() is None:
             self.run_enemies(self.enemies, self.room, [cp.partner_target()], p.grace, dt)
+        self.animate_enemies(dt)
 
     def finish_end(self):
         """The game is over: our own end screen and Top 10 name entry."""
@@ -1263,6 +1283,7 @@ class Game:
     # ------------------------------------------------------------ enemies
     def update_enemies(self, dt):
         if self.coop is not None and self.coop.client:
+            self.animate_enemies(dt)
             return                       # the host moves them (coop.tick eases them along)
         targets = [types.SimpleNamespace(x=self.px, y=self.py, invuln=self.invuln, hit=self.hurt)]
         grace = self.grace
@@ -1270,6 +1291,58 @@ class Game:
             targets.append(self.coop.partner_target())
             grace = max(grace, self.coop.partner.grace)
         self.run_enemies(self.enemies, self.room, targets, grace, dt)
+        self.animate_enemies(dt)
+
+    def animate_enemies(self, dt):
+        """Animation frames for the enemies in view, from how far each has
+        moved since the last frame, so the joiner animates from the eased
+        positions the host sends exactly as the host does from its own."""
+        for e in self.enemies:
+            if e.kind == "bat":
+                self._animate_bat(e, dt)
+            elif e.kind == "skeleton":
+                self._animate_skeleton(e, dt)
+
+    def _animate_bat(self, e, dt):
+        f = int(e.phase * BAT_FPS) % 4
+        e.flap_cd -= dt
+        if f != e.frame:
+            e.frame = f
+            if f == 1 and e.flap_cd <= 0:          # mid-downstroke: the wings bite the air
+                d = math.hypot(self.px - e.x, self.py - e.y)
+                if d < BAT_FLAP_NEAR and self.enemy_on_screen(e):
+                    self.sounds.play("bat_flap", 0.35 + 0.65 * (1 - d / BAT_FLAP_NEAR))
+                    e.flap_cd = 1.0 + 0.8 * ((e.phase * 7.31) % 1.0)   # now and then, not every beat
+
+    def _animate_skeleton(self, e, dt):
+        moved = 0.0 if e.anim_xy is None else math.hypot(e.x - e.anim_xy[0], e.y - e.anim_xy[1])
+        e.anim_xy = (e.x, e.y)
+        if moved > 1.0:                             # a jump (placed, resynced), not a walk
+            moved = 0.0
+        e.jolt = max(0.0, e.jolt - dt)
+        if moved > 1e-4:
+            e.still = 0.0
+            e.walk_d += moved
+            f = int(e.walk_d / SKEL_FRAME_D) % 4
+            if f != e.frame:                        # snap to the next pose (no blending)
+                e.frame = f
+                if f in (0, 2):                     # a stride: a foot comes down
+                    e.jolt = SKEL_JOLT_S
+                    e.foot ^= 1
+                    d = math.hypot(self.px - e.x, self.py - e.y)
+                    if d < SKEL_CLACK_FAR and self.enemy_on_screen(e):
+                        self.sounds.play(f"skel_clack{e.foot + 1}", 0.25 + 0.75 * (1 - d / SKEL_CLACK_FAR) ** 1.5)
+        else:
+            e.still += dt
+            if e.still >= SKEL_IDLE_S and e.frame != 1:
+                e.frame = 1                         # standing: legs together
+                e.walk_d = 1.5 * SKEL_FRAME_D       # the next step starts with the other stride
+
+    def enemy_on_screen(self, e):
+        if self.mode not in ("play", "watch") or self.fade:
+            return False
+        x, y = self.P(e.x, e.y, e.z0)
+        return -60 < x < WIN_W + 60 and HUD_H - 60 < y < WIN_H + 60
 
     def run_enemies(self, enemies, r, targets, grace, dt, audible=True):
         """Move room r's enemies after the nearest target that can be hurt;
@@ -1903,6 +1976,8 @@ class Game:
             s.blit(img, (kx - img.get_width() / 2, ky - img.get_height() - 6 + 4 * math.sin(self.time * 3)))
         elif kind == "enemy":
             e = what[1]
+            if self.draw_anim_enemy(e):
+                return
             img = self.art.enemy(e.kind, e.left)
             z = e.z0 + (8 * math.sin(e.phase * 2) if e.floats else 0)
             bob = 0 if e.floats else abs(math.sin(e.phase * ENEMY_BOB_RATE)) * 3
@@ -1950,6 +2025,26 @@ class Game:
         s.blit(panel, (x0, y0))
         s.blit(im, ((WIN_W - im.get_width()) / 2, y0 + 6))
         s.blit(sub, ((WIN_W - sub.get_width()) / 2, y0 + 10 + im.get_height()))
+
+    def draw_anim_enemy(self, e):
+        """The bat and the skeleton from their animation frames (False when
+        there are none: the single painted sprite is used as before)."""
+        fr = self.art.enemy_frame(e.kind, e.frame, e.left)
+        if fr is None:
+            return False
+        img, ax, ay = fr
+        s = self.screen
+        self.draw_shadow(e.x, e.y, e.r * 2)
+        if e.floats:
+            c = (e.phase * BAT_FPS / 4) % 1.0          # 0 wings up .. 0.5 wings down
+            z = e.z0 + 8 * math.sin(e.phase * 2) - BAT_BOB * math.cos(2 * math.pi * c)
+            ex, ey = self.P(e.x, e.y, z)
+            s.blit(img, (round(ex - ax), round(ey - 26 - ay)))   # body centre where the old sprite's was
+        else:
+            ex, ey = self.P(e.x, e.y, e.z0)
+            jy = 0 if e.jolt <= 0 else (2 if e.jolt > SKEL_JOLT_S / 2 else 1)
+            s.blit(img, (round(ex - ax), round(ey + 4 - ay + jy)))
+        return True
 
     def draw_partner(self):
         """The other player, from their reported position, facing and walking."""
