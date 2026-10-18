@@ -191,6 +191,32 @@ def step_z(r, i):
     return r.STAIR_TOP * (n - i) / n
 
 
+STRINGER_D = 34            # px: depth of the stringers under the step nosings
+
+
+def stringer_z(r, y):
+    """Height of the stringers' lower edge at y (the floor near the foot)."""
+    y1 = r.grand["y1"]
+    return max(0.0, r.STAIR_TOP * (y1 - y) / y1 - STRINGER_D)
+
+
+def _post(s, P, x, y, h):
+    """A slim turned oak support post from the floor up to h."""
+    bx, by = P(x, y, 0)
+    _, ty = P(x, y, h)
+    dark = art.shade(OAK, 0.55)
+    pygame.draw.line(s, dark, (bx, by), (bx, ty), 9)
+    pygame.draw.line(s, OAK, (bx - 1, by), (bx - 1, ty), 5)
+    pygame.draw.line(s, art.shade(OAK, 1.5), (bx - 3, by), (bx - 3, ty), 1)
+    hh = by - ty
+    for k in (0.08, 0.3, 0.7, 0.92):            # turned rings
+        yy = by - hh * k
+        pygame.draw.ellipse(s, dark, (bx - 7, yy - 3, 14, 6))
+        pygame.draw.ellipse(s, OAK, (bx - 6, yy - 3, 11, 5))
+    pygame.draw.rect(s, dark, (bx - 8, by - 6, 16, 6))          # a square foot
+    pygame.draw.rect(s, dark, (bx - 8, ty, 16, 6))               # and head under the stringer
+
+
 def rail_z(r, y):
     y1 = r.grand["y1"]
     rise = r.STAIR_TOP / (2 * y1)
@@ -207,11 +233,15 @@ def _flight_row(g, r, s, j):
         a, b = i / 2, i / 2 + 0.5
         z = step_z(r, i)
         zn = step_z(r, i + 1) if i + 1 < n else 0.0
-        # the panelled side of the flight (the open E side, under the banister)
-        _quad(s, art.shade(OAK, 0.62), [P(x1, a, 0), P(x1, b, 0), P(x1, b, z), P(x1, a, z)])
-        pygame.draw.line(s, art.shade(OAK, 0.38), P(x1, b, 0), P(x1, b, z), 1)
-        # the string along the top of the side
-        _quad(s, art.shade(OAK, 0.85), [P(x1, a, z + 9), P(x1, b, zn + 9 if i + 1 < n else 9), P(x1, b, zn if i + 1 < n else 0), P(x1, a, z)])
+        # open underneath: the floor runs on under the flight, which is carried on
+        # two sloping oak stringers. The far one's inner face shows through the gap,
+        # then the near one: a carved beam whose top is cut to the steps' profile.
+        za, zbb = stringer_z(r, a), stringer_z(r, b)
+        for u, f in ((x0 + 0.06, 0.42), (x1, 0.62)):
+            _quad(s, art.shade(OAK, f), [P(u, a, za), P(u, b, zbb), P(u, b, z), P(u, a, z)])
+        pygame.draw.line(s, art.shade(OAK, 0.95), P(x1, a, za + 7), P(x1, b, zbb + 7), 1)     # a carved bead along it
+        pygame.draw.line(s, art.shade(OAK, 0.3), P(x1, a, za), P(x1, b, zbb), 2)              # its lower edge
+        pygame.draw.line(s, art.shade(OAK, 0.38), P(x1, b, zbb), P(x1, b, z), 1)
         # riser
         _quad(s, OAK_DARK, [P(x0, b, z), P(x1, b, z), P(x1, b, zn), P(x0, b, zn)])
         _quad(s, RUNNER_DARK, [P(ra, b, z), P(rb, b, z), P(rb, b, zn), P(ra, b, zn)])
@@ -230,6 +260,9 @@ def _flight_row(g, r, s, j):
             _baluster(s, P, xr, a + 0.25, z, rail_z(r, a + 0.25) - 2)
     for xr in (x0 + 0.07, x1 - 0.07):
         _rail(s, P, (xr, j, rail_z(r, j)), (xr, j + 1, rail_z(r, j + 1)))
+    if j == 1:           # slim turned oak posts under the high end, carrying the stringers
+        for xr in (x0 + 0.1, x1 - 0.1):
+            _post(s, P, xr, 1.5, stringer_z(r, 1.5))
     if j == y1 - 1:      # carved newels at the foot, the handrails dying into them
         for xr in (x0 + 0.07, x1 - 0.07):
             _newel(s, P, xr, y1 - 0.1)

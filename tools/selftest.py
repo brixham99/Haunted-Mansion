@@ -685,6 +685,20 @@ def grand_stairs_checks(g):
     check("S" not in h.rooms["east_corridor"].doors and "N" not in h.rooms["scullery"].doors,
           "no door between the East Corridor and the Scullery")
     check(len(h.route("staircase_hall", "scullery")) > 1, "the Scullery still has a way in (Kitchen, Coal Cellar)")
+    # open underneath: the floor shows through under the high end, between the posts
+    g.enter_room("staircase_hall", None)
+    g.enemies, g.px, g.py, g.fade = [], 6.5, 6.5, None
+    g.draw()
+    seen = 0
+    for x in (1.0, 1.4, 1.8):
+        qx, qy = (round(v) for v in g.P(x, 4.0, 4))
+        covered = False
+        for _, img, (lx, ly) in grand.layers(g, hall):
+            if 0 <= qx - lx < img.get_width() and 0 <= qy - ly < img.get_height() and img.get_at((qx - lx, qy - ly))[3] > 0:
+                covered = True
+        seen += not covered
+    check(seen >= 2, f"the floor runs on under the stairs ({seen}/3 points show the floor)")
+    check(all(c in hall.solid_cells() for c in hall.flight), "but nobody walks underneath (the flight stays solid below)")
     print(f"grand stairs: flight {len(hall.flight)} tiles up to {hall.STAIR_TOP} px, well {len(land.well)} tiles, "
           f"{len(grand.layers(g, hall))}+{len(grand.layers(g, land))} layers")
 
