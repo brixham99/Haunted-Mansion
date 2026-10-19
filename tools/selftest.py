@@ -544,6 +544,13 @@ def shadow_checks(g):
     check(lad.get_height() >= 1.0 * WALL_H, f"the loft ladder reaches the ceiling ({lad.get_height()} px)")
     win = pygame.surfarray.pixels3d(pygame.image.load(os.path.join(art.ART_DIR, "window.png"))).astype(int)
     check(int((win.mean(2) > 200).sum()) < 40, f"no moon in the window ({int((win.mean(2) > 200).sum())} bright px)")
+    night = pygame.surfarray.pixels3d(g._night(120, 200)).astype(int)
+    check(int((night.mean(2) > 200).sum()) == 0, f"no moon through the open front door ({int((night.mean(2) > 200).sum())} bright px)")
+    del night
+    ks, kh = g.key_state, g.key_holder
+    g.key_state, g.key_holder = "carried", None
+    check(g.coop is None and g.holds_key() and g.my_role() == "host", "on your own, carrying the key is always you")
+    g.key_state, g.key_holder = ks, kh
 
 
 def kitchen_checks(house):

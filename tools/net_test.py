@@ -484,6 +484,79 @@ def main():
     cli.to_title()
     step(games, 5)
 
+    # ---- 2d. only the player carrying the key opens the front door
+    def door_room(g, rid, how=None):
+        g.enter_room(rid, how)
+    # (i) the host holds it; the joiner waits in the hall: shut until the host walks in
+    host, cli, games = connect(screen, 15, PORT, via_scan=False)
+    host.enter_room("drawing_room", None)
+    wait(games, lambda: not host.fade and cli.coop.partner.room == "drawing_room", 120)
+    host.key_state = "carried"
+    host.coop.announce_key()                 # (as if the host had just found it)
+    step(games, 60)
+    check(cli.key_state == "carried" and host.key_holder == "host" and cli.key_holder == "host",
+          f"the joiner hears the host has the key ({cli.key_state}, holder {host.key_holder}/{cli.key_holder})")
+    check(host.door_t is None and cli.door_t is None and cli.room.id == "entrance_hall",
+          f"the joiner is in the hall, but without the key the door stays shut ({host.door_t} / {cli.door_t})")
+    cli.locked_cd = 0
+    cli.try_front_door()
+    step(games, 60)
+    check(cli.out is None and host.coop.p_out is None and host.door_t is None and "has the key" in (cli.msg or ""),
+          f"the joiner can't get out through the shut door ({cli.msg!r})")
+    host.enter_room("entrance_hall", ("door", "W", 0))
+    wait(games, lambda: host.door_t is not None and cli.door_t is not None, 120)
+    check(host.door_t is not None and cli.door_t is not None and host.sounds.requested.get("door_creak") == 1
+          and cli.sounds.requested.get("door_creak") == 1,
+          "the host walks in with the key: the door opens, in step on both games")
+    step(games, int(G.DOOR_OPEN_S / DT) + 5)
+    fd = cli.room.front_door()
+    cli.px, cli.py = fd.index + 1.0, 0.4    # standing at it: the door's open now, either may go
+    wait(games, lambda: abs(host.coop.partner.y - 0.4) < 0.05, 120)
+    cli.locked_cd = 0
+    cli.try_front_door()
+    wait(games, lambda: cli.out == "won", 120)
+    check(cli.out == "won" and host.coop.p_out == "won", "once it's open the joiner can walk out too")
+    host.to_title()
+    cli.to_title()
+    step(games, 5)
+    # (ii) the joiner holds it; the host waits in the hall: shut until the joiner walks in
+    host, cli, games = connect(screen, 16, PORT, via_scan=False)
+    cli.enter_room("drawing_room", None)
+    wait(games, lambda: not cli.fade and host.coop.partner.room == "drawing_room", 120)
+    host.coop.key_taken("You found the front door key!")
+    step(games, 60)
+    check(host.key_holder == "client" and cli.key_holder == "client" and cli.key_state == "carried",
+          f"the joiner carries the key ({host.key_holder}/{cli.key_holder})")
+    check(host.door_t is None and cli.door_t is None and host.room.id == "entrance_hall",
+          "the host in the hall without the key: still shut")
+    host.locked_cd = 0
+    host.try_front_door()
+    step(games, 5)
+    check(host.out is None and not host.won and "has the key" in (host.msg or ""), "and the host can't walk out")
+    cli.enter_room("entrance_hall", ("door", "W", 0))
+    wait(games, lambda: host.door_t is not None and cli.door_t is not None, 120)
+    check(host.door_t is not None and cli.door_t is not None, "the joiner walks in with the key: open on both games")
+    host.to_title()
+    cli.to_title()
+    step(games, 5)
+    # (iii) the key holder is caught for the last time before the door is open: it passes on
+    host, cli, games = connect(screen, 17, PORT, via_scan=False)
+    host.enter_room("drawing_room", None)
+    wait(games, lambda: not host.fade and cli.coop.partner.room == "drawing_room", 120)
+    host.key_state = "carried"
+    host.coop.announce_key()
+    step(games, 30)
+    host.go_out("dead", "ghost")
+    wait(games, lambda: cli.key_holder == "client", 120)
+    check(host.key_holder == "client" and cli.key_holder == "client" and "yours now" in (cli.msg or ""),
+          f"the host is caught: the key passes to the joiner ({cli.msg!r})")
+    check(cli.room.id == "entrance_hall", "the joiner is in the hall")
+    wait(games, lambda: host.door_t is not None and cli.door_t is not None, 120)
+    check(host.door_t is not None and cli.door_t is not None, "and now the door opens for them, on both games")
+    host.to_title()
+    cli.to_title()
+    step(games, 5)
+
     # ---- 3. disconnects mid-game
     host, cli, games = connect(screen, 7, PORT, via_scan=False)
     host.to_title()                          # host quits: says goodbye

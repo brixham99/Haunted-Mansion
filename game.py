@@ -466,6 +466,7 @@ class Game:
         self.key_place = self.house.place_key(self.rng, hidden=self.key_hidden)
         self.key_state = "hidden"         # hidden | revealed | carried
         self.door_t = None                # front door: None = shut, else seconds into its swing (open at DOOR_OPEN_S)
+        self.key_holder = None            # two-player: who carries the key, "host" or "client" (None: the host)
         self.key_pos = None               # floor position once revealed
         if self.key_place[1] == "open":
             self.key_state = "revealed"
@@ -1209,6 +1210,31 @@ class Game:
                 return True
         return False
 
+    def my_role(self):
+        """"host" (also on our own) or "client"."""
+        return "client" if self.coop is not None and self.coop.client else "host"
+
+    def holder(self):
+        """Who carries the key: "host" or "client" (on our own, always us)."""
+        return self.key_holder or "host"
+
+    def holds_key(self):
+        """Do WE carry the key? (In two-player only one player does.)"""
+        return self.key_state == "carried" and (self.coop is None or self.holder() == self.my_role())
+
+    def holder_in_hall(self):
+        """Is the player carrying the key in the Entrance Hall (and still in the house)?
+        Only they open the front door; the other player can't."""
+        if self.key_state != "carried":
+            return False
+        if self.coop is None:
+            return self.someone_in_hall()
+        if self.holder() == self.my_role():
+            return self.mode == "play" and self.out is None and self.room.id == M.START_ROOM
+        cp = self.coop
+        p = cp.partner
+        return p.seen and not p.fade and p.room == M.START_ROOM and cp.partner_out() is None
+
     def open_front_door(self):
         """Start the door's swing (with the creak) if we are looking at the
         Entrance Hall; anywhere else it is simply open by the time we get there.
@@ -1223,7 +1249,7 @@ class Game:
 
     def update_door(self, dt):
         if self.door_t is None:
-            if self.key_state == "carried" and self.someone_in_hall():
+            if self.holder_in_hall():       # the key holder walks into the hall: it opens
                 self.open_front_door()
         elif self.door_t < DOOR_OPEN_S:
             self.door_t = min(DOOR_OPEN_S, self.door_t + dt)
@@ -1380,7 +1406,7 @@ class Game:
                 self.coop.request("search", obj=o.id)   # the host hands it over
                 o.searched = True
                 return
-            self.key_state = "carried"
+            self.key_state, self.key_holder = "carried", self.my_role()
             self.sounds.play("key_found")
             self.add_points(PTS_KEY)
             if self.coop is not None:
@@ -1395,7 +1421,12 @@ class Game:
         o.searched = True
 
     def try_front_door(self):
-        if self.key_state == "carried" and self.coop is not None and self.coop.client:
+        if self.key_state == "carried" and self.coop is not None and self.door_t is None and not self.holds_key():
+            if self.locked_cd <= 0:           # two-player: only the one carrying the key unlocks it
+                self.sounds.play("locked")
+                self.say(f"The front door is still locked. {self.coop.partner_name} has the key!")
+                self.locked_cd = 2.0
+        elif self.key_state == "carried" and self.coop is not None and self.coop.client:
             if self.locked_cd <= 0:
                 self.coop.request("escape")
                 self.locked_cd = 0.5
@@ -1414,7 +1445,7 @@ class Game:
             if self.coop is not None and self.coop.client:
                 self.coop.want_pickup()
                 return
-            self.key_state = "carried"
+            self.key_state, self.key_holder = "carried", self.my_role()
             self.sounds.play("key_found")
             self.add_points(PTS_KEY)
             if self.coop is not None:
@@ -2159,7 +2190,8 @@ class Game:
         self.screen.blit(out, (round(x), round(y)))
 
     def _night(self, w, h):
-        """The view out of the front door: moonlit garden in the fog."""
+        """The view out of the front door: a starry night garden in the fog
+        (no moon: none in the windows or doorways, only in the paintings)."""
         key = ("night", w, h)
         img = self.glow_cache.get(key)
         if img is not None:
@@ -2167,16 +2199,10 @@ class Game:
         yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
         v = yy / max(1, h - 1)
         sky = np.stack([26 + 34 * v, 36 + 44 * v, 74 + 42 * v], -1)
-        mx, my, mr = w * 0.68, h * 0.22, max(4.0, w * 0.13)
-        d = np.sqrt((xx - mx) ** 2 + (yy - my) ** 2)
-        sky += (np.clip(1 - d / (mr * 4.5), 0, 1) ** 2 * 70)[..., None] * np.array([0.8, 0.9, 1.0])
-        moon = d < mr
-        sky[moon] = (226, 230, 214)
         rnd = random.Random(5)
         for _ in range(w * h // 260):                  # a few stars
             sx, sy = rnd.randrange(w), rnd.randrange(int(h * 0.45))
-            if not moon[sy, sx]:
-                sky[sy, sx] = (170, 176, 200)
+            sky[sy, sx] = (170, 176, 200)
         # bare trees and a garden wall in silhouette
         ground = h * 0.72
         sil = np.zeros((h, w), bool)
@@ -2193,7 +2219,7 @@ class Game:
                 sil |= ((xx - px_) ** 2 + (yy - py_) ** 2 < 1.2) & (t > 0) & (t < 1)
         sil |= yy > ground + np.sin(xx * 0.4) * 1.5
         sky[sil] = (10, 12, 20)
-        # the path to the gate, catching the moon
+        # the pale path to the gate
         path = (yy > ground + 2) & (np.abs(xx - w * 0.5) < (yy - ground) * 0.9 + 3)
         sky[path] = (54, 60, 74)
         # low fog, thicker near the ground

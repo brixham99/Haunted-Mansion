@@ -150,6 +150,8 @@ class Coop:
             return
         self.pickup_cd = max(0.0, self.pickup_cd - dt)
         if self.host:
+            self.hand_over_key()
+        if self.host:
             p = self.partner
             if p.seen and p.room != g.room.id and self.other_enemies and self.p_out is None:
                 r = g.house.rooms[p.room]
@@ -175,7 +177,7 @@ class Coop:
             self.send("s", p=self.my_pose())
             return
         p = self.partner
-        msg = {"p": self.my_pose(), "time": round(g.time, 2), "key": [g.key_state, g.key_pos]}
+        msg = {"p": self.my_pose(), "time": round(g.time, 2), "key": [g.key_state, g.key_pos, g.key_holder]}
         # the room the joiner is looking at: their own, or ours while they watch us
         rid = p.room if self.p_out is None else g.room.id
         if p.seen and rid in g.house.rooms:
@@ -215,8 +217,11 @@ class Coop:
         # ---- client: the host's world (the clock and the key; scores and hearts are our own)
         if g.out is None:
             g.time = float(m.get("time", g.time))
-        ks, kp = m.get("key", [g.key_state, g.key_pos])
+        key = list(m.get("key", [g.key_state, g.key_pos, g.key_holder]))
+        ks, kp = key[0], key[1]
         g.key_state, g.key_pos = ks, (tuple(kp) if kp else None)
+        if len(key) > 2 and key[2] in ("host", "client", None):
+            g.key_holder = key[2]             # who carries it: the host decides
         if g.mode == "watch" and p.room != g.room.id:
             g.watch_room(p.room)
         if m.get("room") == g.room.id and not g.fade:
@@ -328,7 +333,8 @@ class Coop:
                 self.key_taken("You picked up the front door key! Back to the Entrance Hall!")
         elif t == "escape":
             fd = r.front_door()
-            if fd is not None and g.key_state == "carried" and p.ty < 1.2 and fd.index - 0.3 <= p.tx < fd.index + 2.3:
+            if fd is not None and g.key_state == "carried" and (g.door_t is not None or g.holder() == "client") \
+                    and p.ty < 1.2 and fd.index - 0.3 <= p.tx < fd.index + 2.3:
                 self.p_out = "won"
                 self.other_enemies = None
                 self.send("escaped", pts=self.G.PTS_ESCAPE)
@@ -336,6 +342,21 @@ class Coop:
                 if g.out is None:
                     g.say(f"{self.partner_name} escaped through the front door! Your turn!")
                 self.check_end()
+
+    def hand_over_key(self):
+        """Host: if whoever carries the key is caught for the last time before
+        the door is open, the key passes to the other player (else nobody
+        could ever open the door)."""
+        g = self.g
+        if g.key_state != "carried" or g.door_t is not None:
+            return
+        if g.holder() == "host" and g.out == "dead" and self.p_out is None:
+            g.key_holder = "client"
+            self.send("say", text=f"{self.G.CHARACTERS[g.character]} was caught: the key is yours now! "
+                                  "Take it to the Entrance Hall!")
+        elif g.holder() == "client" and self.p_out == "dead" and g.out is None:
+            g.key_holder = "host"
+            g.say(f"{self.partner_name} was caught: the key is yours now! Take it to the Entrance Hall!")
 
     def check_end(self):
         """Host: once both players are out, the game is over for both."""
@@ -347,7 +368,7 @@ class Coop:
 
     def key_taken(self, text):
         g = self.g
-        g.key_state = "carried"
+        g.key_state, g.key_holder = "carried", "client"
         g.sounds.play("key_found")
         if g.out is None:
             g.say(f"{self.partner_name} found the front door key! Meet at the front door in the Entrance Hall!")
@@ -355,6 +376,7 @@ class Coop:
 
     def announce_key(self):
         """Host found the key itself: tell the other player."""
+        self.g.key_holder = "host"
         self.send("found", text=f"{self.G.CHARACTERS[self.g.character]} found the front door key! "
                                 "Meet at the front door in the Entrance Hall!")
 
@@ -370,7 +392,7 @@ class Coop:
             if g.out is None:
                 g.say(str(m.get("text", "")))
             if t == "key":
-                g.key_state = "carried"
+                g.key_state, g.key_holder = "carried", "client"
                 g.add_points(int(m.get("pts", self.G.PTS_KEY)))
         elif g.out is not None and t != "end":
             return                        # we're watching: nothing more can happen to us
