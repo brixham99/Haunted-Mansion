@@ -86,12 +86,12 @@ ROOMS = {
         wall=[("front_door", "N", 3), ("painting", "W", 5), ("window", "N", 7)]),
     "drawing_room": R("Drawing Room", "ground", (1, 0), (8, 7), "drawing",
         furn=[("fireplace", 3, 0, "S"), ("armchair", 2, 1, "auto"), ("armchair", 5, 1, "auto"), ("sofa", 0, 5, "E"),
-              ("round_table", 6, 4, "S"), ("rug", 3, 3, "S"), ("piano", 6, 0, "S")],
+              ("side_table", 6, 4, "S"), ("rug", 3, 3, "S"), ("piano", 6, 0, "S")],
         wall=[("painting_lady", "N", 1), ("mirror", "W", 0)], enemies=["ghost"]),
     # round: a circle of iron and glass inscribed in the 8x8 grid (see Room.round)
     "conservatory": R("Conservatory", "ground", (0, 0), (8, 8), "glass",
         furn=[("potted_palm", 1, 1, "E"), ("potted_palm", 6, 1, "S"), ("potted_palm", 1, 6, "E"), ("statue", 3, 0, "S"),
-              ("round_table", 5, 5, "S"), ("chair", 6, 5, "auto"), ("chest", 0, 3, "E"), ("candelabra", 4, 0, "S")],
+              ("side_table", 5, 5, "S"), ("chair", 6, 5, "auto"), ("chest", 0, 3, "E"), ("candelabra", 4, 0, "S")],
         shape="round", safe=True),      # a calm, safe room: no baddies, rain on the glass
     "music_room": R("Music Room", "ground", (0, 1), (8, 7), "blue",
         furn=[("piano", 0, 0, "E"), ("harp", 6, 0, "S"), ("chair", 2, 3, "auto"), ("chair", 5, 3, "auto"), ("candelabra", 0, 5, "S")],
@@ -110,7 +110,7 @@ ROOMS = {
         wall=[("painting", "W", 7), ("painting_landscape", "N", 5)], enemies=["ghost"],
         grand=dict(kind="stairs", swap=True, x0=3, x1=5, y1=5)),
     "east_corridor": R("East Corridor", "ground", (3, 1), (9, 4), "wood",
-        furn=[("suit_of_armour", 7, 0, "S"), ("potted_palm", 0, 0, "S"), ("round_table", 1, 3, "S"), ("chair", 6, 3, "auto")],
+        furn=[("suit_of_armour", 7, 0, "S"), ("potted_palm", 0, 0, "S"), ("side_table", 1, 3, "S"), ("chair", 6, 3, "auto")],
         wall=[("painting", "N", 2), ("painting_lady", "N", 5), ("cobweb", "N", 8)], enemies=["skeleton"]),
     "study": R("Study", "ground", (3, 0), (7, 7), "green",
         furn=[("desk", 3, 0, "S"), ("chair", 3, 1, "auto"), ("bookcase", 0, 0, "E"), ("round_table", 5, 5, "S"),
@@ -121,7 +121,7 @@ ROOMS = {
               ("bookcase", 5, 0, "S"), ("desk", 3, 4, "S"), ("armchair", 5, 5, "auto"), ("candelabra", 7, 0, "S")],
         wall=[("cobweb", "W", 7)], enemies=["ghost", "spider"]),
     "billiard_room": R("Billiard Room", "ground", (4, 1), (8, 8), "green",
-        furn=[("billiard_table", 2, 3, "S"), ("chair", 6, 1, "auto"), ("armchair", 7, 6, "auto"), ("round_table", 0, 0, "S"),
+        furn=[("billiard_table", 2, 3, "S"), ("chair", 6, 1, "auto"), ("armchair", 7, 6, "auto"), ("side_table", 0, 0, "S"),
               ("suit_of_armour", 0, 6, "E")],
         wall=[("painting_landscape", "W", 1), ("painting", "N", 1)], enemies=["goblin", "skeleton"]),
     "ballroom": R("Ballroom", "ground", (0, 2), (9, 9), "ball",
@@ -364,7 +364,7 @@ class Room:
                     fx, fy = p.exit_pos()            # just in front of the hearth
                     if abs(fx - cx) <= 3.5 and abs(fy - cy) <= 3.5:
                         return toward(p.x + p.gx / 2, p.y + p.gy / 2)
-        for kinds in (SEAT_AT, ("round_table",)):   # at a table or desk: face it
+        for kinds in (SEAT_AT, ("round_table", "side_table")):   # at a table or desk: face it
             for d, (dx, dy) in (("E", (1, 0)), ("W", (-1, 0)), ("S", (0, 1)), ("N", (0, -1))):
                 p = occ.get((o.x + dx, o.y + dy))
                 if p is not None and p.type in kinds:

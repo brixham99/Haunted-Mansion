@@ -422,6 +422,11 @@ def d_round_table(p):
     p.ball(0.5, 0.5, p.h + 10, 11, (150, 140, 230))
 
 
+def d_side_table(p):
+    p.cyl(0.5, 0.5, 0.06, 0, p.h - 6, DARK_WOOD)
+    p.cyl(0.5, 0.5, 0.38, p.h - 10, p.h - 4, (230, 226, 216))
+
+
 def d_kitchen_table(p):
     for x, y in ((0.2, 0.2), (0.2, p.gy - 0.2), (p.gx - 0.2, 0.2), (p.gx - 0.2, p.gy - 0.2)):
         p.box(x - 0.06, y - 0.06, x + 0.06, y + 0.06, 0, p.h - 8, PINE)

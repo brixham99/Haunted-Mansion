@@ -73,6 +73,7 @@ _t("rocking_horse", "furniture", (1, 1), 95, "Dappled rocking horse with a missi
 # ---- furniture: solid scenery ----
 _t("dining_table", "furniture", (3, 2), 70, "Long dining table, white tablecloth with stains, candelabra, a rotting feast.", solid=True)
 _t("round_table", "furniture", (1, 1), 70, "Small round side table with a lace cloth and a crystal ball.", solid=True)
+_t("side_table", "furniture", (1, 1), 70, "Small round side table with a lace cloth (the crystal-ball table without its ball).", solid=True)
 _t("kitchen_table", "furniture", (2, 2), 70, "Scrubbed pine kitchen table, a cleaver, a pumpkin being carved.", solid=True)
 _t("sofa", "furniture", (2, 1), 80, "Chesterfield sofa, cracked oxblood leather, a moth-eaten cushion.", solid=True)
 _t("billiard_table", "furniture", (3, 2), 70, "Billiard table, green baize, balls mid-game, cues against it.", solid=True)

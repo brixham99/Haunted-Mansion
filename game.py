@@ -49,7 +49,7 @@ PLAYER_SPEED = 3.0             # tiles per second
 # square on the floor (piano, fireplaces, wardrobes, bookcases, dressers,
 # clocks, chests, the range, the boiler...) gets none: the old soft patch
 # spread out past their base and they looked as if they floated.
-CONTACT_SHADOW = {"chair": 0.2, "armchair": 0.16, "round_table": 0.2, "dining_table": 0.14, "kitchen_table": 0.12,
+CONTACT_SHADOW = {"chair": 0.2, "armchair": 0.16, "round_table": 0.2, "side_table": 0.2, "dining_table": 0.14, "kitchen_table": 0.12,
                   "billiard_table": 0.14, "sofa": 0.12, "bed": 0.12, "cot": 0.14, "bath": 0.14,
                   "sewing_machine": 0.2, "mangle": 0.2, "candelabra": 0.3, "dummy": 0.32, "cauldron": 0.2,
                   "rocking_horse": 0.22, "washstand": 0.14}
