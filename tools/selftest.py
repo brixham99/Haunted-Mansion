@@ -647,23 +647,32 @@ def grand_stairs_checks(g):
     for _ in range(60):
         g.move_player(0, 1, DT)
     check(g.py <= 2 - G.PLAYER_R + 1e-3, f"the banister keeps you out of the stairwell ({g.py:.2f})")
-    # the banister in front of you fades; nothing fades when you're in the open
-    def settle(x, y, frames=60):
-        seen = []
-        for _ in range(frames):
-            g.px, g.py = x, y
-            g.time += DT
-            g.draw()
-            seen.append(dict(g.grand_fade))
-        return seen
-    settle(6.6, 6.6, 10)
-    seen = settle(2.6, 1.7)
-    steps = [max(abs(a.get(i, 255) - b.get(i, 255)) for i in range(len(grand.layers(g, g.room)))) for a, b in zip(seen, seen[1:])]
-    check(any(a < 255 for a in g.grand_fade.values()) and len(set(g.grand_fade.values())) == 1
-          and len(g.grand_fade) == len(grand.layers(g, g.room)), f"the whole banister in front of you fades, all alike ({len(g.grand_fade)} layers)")
-    check(max(steps) <= 20 and min(seen[0].values(), default=255) > 200, f"easing in, never snapping (largest step {max(steps)})")
-    seen = settle(6.6, 6.6, 90)
-    check(not g.grand_fade and seen[0], "and eases back to solid when nobody is behind it")
+    # the stairs and the banister are always solid: every layer blitted at full alpha,
+    # with someone behind them, in front of them, beside, on or nowhere near them
+    class Spy(pygame.Surface):
+        def blit(self, src, *a, **k):
+            if id(src) in mine:
+                drawn.append(src.get_alpha())
+            return super().blit(src, *a, **k)
+    real = g.screen
+    for rid, spots in (("landing", [(2.6, 1.7), (4.0, 1.5), (6.6, 6.6), (1.5, 4.0), (6.5, 3.0)]),
+                       ("staircase_hall", [(3.0, 2.4), (1.0, 2.5), (5.6, 4.0), (3.0, 4.0), (6.6, 6.6), (2.0, 5.6)])):
+        g.enter_room(rid, None)
+        g.enemies, g.fade = [], None
+        mine = {id(img) for _, img, _ in grand.layers(g, g.room)}
+        drawn = []
+        g.screen = Spy(real.get_size(), pygame.SRCALPHA)
+        for x, y in spots:
+            for _ in range(20):
+                g.px, g.py = x, y
+                g.time += DT
+                g.draw()
+        g.screen = real
+        n = len(grand.layers(g, g.room))
+        check(len(drawn) == n * 20 * len(spots) and all(a is None or a == 255 for a in drawn),
+              f"the {g.room.name}'s {'flight' if rid == 'staircase_hall' else 'banister'} is always drawn solid ({len(drawn)} blits, alphas {sorted(set(drawn), key=str)})")
+    g.enter_room("landing", None)
+    g.enemies, g.fade = [], None
     # depth: on the flight, drawn over the row underfoot and under the rows below
     box = grand.figure_box(hall, 3.3, 4.0, G.PLAYER_R)
     order = G.depth_sort([((3, 3, 4, 5), "row3"), ((4, 3, 5, 5), "row4"), (box, "me")])

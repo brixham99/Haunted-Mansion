@@ -149,7 +149,6 @@ def render_room(g, r):
     items = []
     if r.grand:
         items += [(box, ("grand", i)) for i, (box, _, _) in enumerate(grand.layers(g, r))]
-        g.grand_fade = {}
     for o in r.objs:
         if r.grand and o.type in ("stairs_up", "stairs_down"):
             continue

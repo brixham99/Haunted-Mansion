@@ -1957,7 +1957,6 @@ class Game:
             for i, (box, _, _) in enumerate(grand.layers(self, r)):
                 items.append((box, ("grand", i)))
         order = depth_sort(items)
-        self.grand_fade = grand.fades(self, r, order) if r.grand else {}
         for _, what in order:
             self.draw_item(what)
         dark = self.dark_cache[r.id].copy()
@@ -2309,7 +2308,7 @@ class Game:
             _, o, x, y = what
             self.blit_footprint(o.type, o, x, y)
         elif kind == "grand":
-            grand.draw_layer(self, self.room, what[1], self.grand_fade.get(what[1], 255))
+            grand.draw_layer(self, self.room, what[1])
         elif kind == "key":
             img = self.art.base("key")
             kx, ky = self.P(*self.key_pos)
