@@ -22,8 +22,9 @@ and newel posts are upright.
 
 Both are depth-sorted with the player and baddies as many small layers (a
 flight row, a tile of balustrade, a post), each pre-drawn once per room and
-cached; a layer in front of a player who stands behind it fades (fades),
-like the front-edge ghost door frames.
+cached; when someone is hidden behind the piece, the whole of it eases to
+see-through together (fades), on hysteresis, like the front-edge ghost
+door frames.
 """
 from __future__ import annotations
 
@@ -415,34 +416,82 @@ def _figure_rects(g, r):
     return out
 
 
-def fades(g, r, order):
-    """{layer index: alpha}: a layer drawn after (in front of) someone whose
-    figure it overlaps fades, so nobody is hidden behind the banisters."""
-    lays = layers(g, r)
+SEE_ON = 0.10       # share of someone's figure hidden by the piece before it goes see-through
+SEE_OFF = 0.03      # ...and back down to this before it comes solid again (hysteresis)
+SEE_HOLD = 0.45     # s: it only comes solid again once nobody has been hidden for this long
+FADE_TAU = 0.14     # s: the eased fade's time constant (about 0.4 s to settle)
+
+
+def _masks(g, r):
+    """Per-layer opaque-pixel masks, cached alongside the layers."""
+    cache = g.__dict__.setdefault("grand_masks", {})
+    if r.id not in cache:
+        cache[r.id] = [pygame.mask.from_surface(img, 20) for _, img, _ in layers(g, r)]
+    return cache[r.id]
+
+
+def cover(g, r, order):
+    """0..1: the largest share of anyone's figure hidden by the parts of the
+    piece drawn in front of them (the union of those parts' pixels, so it
+    changes smoothly as they walk, not part by part)."""
+    lays, masks = layers(g, r), _masks(g, r)
     figs = _figure_rects(g, r)
     pos = {w[0]: k for k, (_, w) in enumerate(order) if w[0] in ("player", "partner")}
     on = set()
-    if g.out is None and r.on_flight(g.px, g.py):
-        on.add("player")
-    if g.coop is not None and g.coop.partner_here() and r.on_flight(g.coop.partner.x, g.coop.partner.y):
-        on.add("partner")
-    out = {}
-    for k, (_, w) in enumerate(order):
-        if w[0] != "grand":
+    if r.grand["kind"] == "stairs":      # climbing: the steps in front are below the feet
+        if g.out is None and r.on_flight(g.px, g.py):
+            on.add("player")
+        if g.coop is not None and g.coop.partner_here() and r.on_flight(g.coop.partner.x, g.coop.partner.y):
+            on.add("partner")
+    best = 0.0
+    for who, fr in figs:
+        if who in on or who not in pos:
             continue
-        _, img, (lx, ly) = lays[w[1]]
-        rect = pygame.Rect(lx, ly, img.get_width(), img.get_height())
-        flight = r.grand["kind"] == "stairs"
-        for who, fr in figs:
-            if flight and who in on:     # climbing: the steps in front are below the feet, nothing to fade
+        hid = pygame.mask.Mask(fr.size)
+        for k, (_, w) in enumerate(order):
+            if k <= pos[who] or w[0] != "grand":
                 continue
-            if who in pos and pos[who] < k and rect.colliderect(fr):
-                # only if something of the layer is actually over the figure
-                sub = fr.clip(rect)
-                part = img.subsurface(sub.move(-lx, -ly))
-                if part.get_bounding_rect(min_alpha=20).w:
-                    out[w[1]] = FADE_FLIGHT if flight else FADE_ALPHA
-    return out
+            _, img, (lx, ly) = lays[w[1]]
+            if fr.colliderect(pygame.Rect(lx, ly, img.get_width(), img.get_height())):
+                hid.draw(masks[w[1]], (lx - fr.x, ly - fr.y))
+        best = max(best, hid.count() / float(fr.w * fr.h))
+    return best
+
+
+def fades(g, r, order):
+    """{layer index: alpha} for the whole piece, all its layers alike.
+
+    Someone hidden behind the flight or the gallery's banister makes the
+    whole piece go see-through together, on hysteresis (it goes at SEE_ON
+    of their figure hidden, and only comes back at SEE_OFF and has stayed
+    there for SEE_HOLD), and the alpha eases there and back over a fraction of a
+    second, on the house clock. Never piece by piece, never a snap: a
+    step's sort order or one baluster's edge flipping as someone passes
+    can't make anything flicker."""
+    st = g.__dict__.setdefault("grand_see", {})
+    c = cover(g, r, order)
+    s = st.get(r.id)
+    fresh = s is None or s["room"] is not g.room or g.time < s["t"]
+    if fresh:
+        s = st[r.id] = {"room": g.room, "t": g.time, "see": c >= SEE_ON, "clear": g.time, "a": None}
+    if c > SEE_OFF:
+        s["clear"] = g.time            # still (partly) hidden: the clock to come solid restarts
+    if not s["see"] and c >= SEE_ON:
+        s["see"] = True
+    elif s["see"] and g.time - s["clear"] >= SEE_HOLD:
+        s["see"] = False
+    low = FADE_FLIGHT if r.grand["kind"] == "stairs" else FADE_ALPHA
+    target = float(low if s["see"] else 255)
+    if fresh or s["a"] is None:
+        a = target
+    else:
+        a = s["a"] + (target - s["a"]) * (1.0 - math.exp(-max(0.0, g.time - s["t"]) / FADE_TAU))
+        if abs(a - target) < 0.5:
+            a = target
+    s["a"], s["t"] = a, g.time
+    if a >= 254.5:
+        return {}
+    return {i: int(round(a)) for i in range(len(layers(g, r)))}
 
 
 def draw_layer(g, r, i, alpha=255):

@@ -2034,7 +2034,7 @@ class Game:
             who.append((self.px, self.py))
         if self.coop is not None and self.coop.partner_here():
             who.append((self.coop.partner.x, self.coop.partner.y))
-        layer.set_alpha(int(roundroom.FRONT_ALPHA * roundroom.front_fade(r, who)))
+        layer.set_alpha(int(roundroom.FRONT_ALPHA * self.eased((r.id, "round_front"), roundroom.front_fade(r, who))))
         self.screen.blit(layer, at)
 
     # ------------------------------------------------------------ exit door frames
@@ -2059,6 +2059,21 @@ class Game:
         rng = r.door_range(side)
         mid = (rng.start + rng.stop) / 2
         return {"N": (mid, 0.0), "W": (0.0, mid), "S": (mid, float(r.d)), "E": (float(r.w), mid)}[side]
+
+    def eased(self, key, target, tau=0.14):
+        """A see-through share (0..1) eased towards target on the house clock,
+        so a fade never snaps when someone steps into or out of its reach
+        (a fresh room starts settled)."""
+        st = self.__dict__.setdefault("ease_state", {})
+        v = st.get(key)
+        if v is None or v[2] is not self.room or self.time < v[1]:
+            out = target
+        else:
+            out = v[0] + (target - v[0]) * (1.0 - math.exp(-(self.time - v[1]) / tau))
+            if abs(out - target) < 0.002:
+                out = target
+        st[key] = (out, self.time, self.room)
+        return out
 
     def ghost_fade(self, r, side, rect):
         """1.0, or less when the player, the other player or an enemy is
@@ -2097,7 +2112,7 @@ class Game:
             if side in ("S", "E"):
                 layer, at = self.ghost_frame(r, side)
                 rect = layer.get_rect(topleft=at)
-                alpha = GHOST_FRAME_ALPHA * self.ghost_fade(r, side, rect) + 30 * near * pulse
+                alpha = GHOST_FRAME_ALPHA * self.eased((r.id, "ghost", side), self.ghost_fade(r, side, rect)) + 30 * near * pulse
                 layer.set_alpha(int(max(0, min(255, alpha))))
                 s.blit(layer, at)
             if near > 0:
