@@ -1,10 +1,12 @@
 # Haunted Mansion (working title)
 
-A Halloween isometric flip-screen adventure in the style of Knight Lore and Head Over Heels. Play as Archie or Holly, explore a haunted mansion of 35 rooms over four floors, find the front door key (somewhere different every game) and escape through the front door.
+A Halloween isometric flip-screen adventure in the style of Knight Lore but themed more like Atic Atac, both games from Ultimate circa 1983-84. Play as Archie or Holly, explore a haunted mansion of 35 rooms over four floors, find the front door key (somewhere different every game) and escape through the front door.
 
 ## Install and play
 
 ```bash
+git clone https://github.com/brixham99/Haunted-Mansion.git
+cd Haunted-Mansion
 python3 -m pip install -r requirements.txt     # pygame-ce and numpy
 python3 game.py
 ```
