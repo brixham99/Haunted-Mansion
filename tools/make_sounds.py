@@ -437,6 +437,58 @@ def make_bat_flap():
     return (air + snap + whomp) * env(n, 0.002, 0.04)
 
 
+def make_mummy_grunt(seed, f0, d=0.55):
+    """A muffled grunt through old bandages (~0.5 s): a low glottal buzz
+    (pulse train with jitter) through a closed-mouth vowel, a breathy edge
+    and a quick swell and fall."""
+    r = np.random.default_rng(seed)
+    n = int(d * SR)
+    t = t_(d)[:n]
+    f = f0 * (1 + 0.12 * np.sin(np.pi * t / d)) * (1 - 0.18 * t / d) * (1 + 0.02 * r.standard_normal(n).cumsum() / np.sqrt(n))
+    ph = np.cumsum(f) / SR
+    buzz = (ph % 1 < 0.18).astype(float) - 0.18
+    vowel = bp_fast(buzz, 90, 700) + 0.5 * bp_fast(buzz, 380, 520)
+    breath = bp_fast(r.standard_normal(n), 200, 1500) * 0.25
+    shape = np.clip(t / 0.06, 0, 1) * np.exp(-np.clip(t - 0.08, 0, None) * 5.0)
+    return reverb((vowel + breath) * shape * env(n, 0.005, 0.12), 0.7, 0.25)
+
+
+def make_mummy():
+    """It has seen you: a long, rising-then-sinking moan with grunts in it."""
+    a = make_mummy_grunt(41, 95, 1.2)
+    b = make_mummy_grunt(43, 80, 0.6)
+    out = np.zeros(len(a) + len(b))
+    out[:len(a)] += a
+    out[int(0.75 * len(a)):int(0.75 * len(a)) + len(b)] += b * 0.8
+    return out
+
+
+def make_cat_hiss():
+    """The cat's hiss (~1.1 s): a sharp spit, then a long airy hiss with a
+    throaty growl under it, fading."""
+    r = np.random.default_rng(57)
+    d = 1.1
+    n = int(d * SR)
+    t = t_(d)[:n]
+    spit = bp_fast(r.standard_normal(n), 1500, 9000) * np.exp(-t * 40) * 1.4
+    hiss = bp_fast(r.standard_normal(n), 3000, 9500) * np.clip(t / 0.04, 0, 1) * np.exp(-t * 1.6)
+    ph = np.cumsum(70 + 10 * np.sin(2 * np.pi * 3 * t)) / SR
+    growl = bp_fast((ph % 1 < 0.3) - 0.3, 100, 900) * 0.35 * np.exp(-t * 2.0)
+    return (spit + hiss + growl) * env(n, 0.002, 0.25)
+
+
+def make_cat_mew():
+    """A small, friendly 'mrrp?': a short rising chirp of a voiced vowel."""
+    d = 0.42
+    n = int(d * SR)
+    t = t_(d)[:n]
+    f = 520 + 260 * np.sin(np.pi * np.clip(t / d, 0, 1) * 0.9)
+    ph = np.cumsum(f) / SR
+    v = np.sin(2 * np.pi * ph) + 0.5 * np.sin(4 * np.pi * ph) + 0.25 * np.sin(6 * np.pi * ph)
+    trill = 1 + 0.35 * np.sin(2 * np.pi * 28 * t) * (t < 0.12)
+    return reverb(v * trill * env(n, 0.03, 0.18), 0.5, 0.15)
+
+
 MAKERS = {
     "title_theme": (make_title_theme, 0.7), "ambience": (make_ambience, 0.7), "rain_glass": (make_rain_glass, 0.6),
     "creak1": (lambda: make_creak(1, 18), 0.6), "creak2": (lambda: make_creak(2, 11), 0.6),
@@ -449,6 +501,9 @@ MAKERS = {
     "door_creak": (make_door_creak, 0.85),
     "skel_clack1": (lambda: make_skel_clack(5, 1250), 0.7), "skel_clack2": (lambda: make_skel_clack(9, 1080), 0.7),
     "bat_flap": (make_bat_flap, 0.6), "vampire": (make_vampire, 0.45),
+    "mummy": (make_mummy, 0.6), "mummy_grunt1": (lambda: make_mummy_grunt(11, 88), 0.6),
+    "mummy_grunt2": (lambda: make_mummy_grunt(23, 72, 0.7), 0.6),
+    "cat_hiss": (make_cat_hiss, 0.6), "cat_mew": (make_cat_mew, 0.45),
 }
 
 

@@ -1055,7 +1055,8 @@ def wall_shear(img, side, squeeze=True):
 # Animated enemies: enemy kind -> frame set written by tools/cut_anims.py
 # (assets/art/<set>_<n>.png and anims.json with the in-game size and anchor).
 # Painted facing screen right like every enemy; mirrored for screen left.
-ENEMY_ANIMS = {"bat": "bat", "skeleton": "skeleton_walk", "vampire": "vampire"}
+ENEMY_ANIMS = {"bat": "bat", "skeleton": "skeleton_walk", "vampire": "vampire",
+               "mummy": "mummy_se", "mummy_ne": "mummy_ne"}   # the mummy: front and back 3/4
 
 
 def load_anims():
@@ -1127,7 +1128,7 @@ class Art:
         if key not in self.cache:
             if not hasattr(self, "anims"):
                 self.anims = load_anims()
-            name = ENEMY_ANIMS.get(kind)
+            name = ENEMY_ANIMS.get(kind, kind if kind.startswith("cat_") else None)
             meta = self.anims.get(name) if name else None
             val = None
             if meta:

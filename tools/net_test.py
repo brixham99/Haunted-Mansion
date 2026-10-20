@@ -557,6 +557,76 @@ def main():
     cli.to_title()
     step(games, 5)
 
+    # ---- 2e. the black cat: found in the Coal Cellar, follows, switches once per meeting, hisses, leads
+    host, cli, games = connect(screen, 18, PORT, via_scan=False)
+    hc, cc = host.cat, cli.cat
+    step(games, 60)
+    check(hc.state == "asleep" and hc.room == "coal_cellar" and cc.state == "asleep" and cc.room == "coal_cellar",
+          f"no cat about until someone goes into the Coal Cellar ({hc.state}/{cc.state})")
+    cli_states = []
+
+    def run(n=1):
+        for _ in range(n):
+            step(games)
+            if not cli_states or cli_states[-1] != cc.state:
+                cli_states.append(cc.state)
+
+    def walk_cli(rid):
+        cli.enter_room(rid, None)
+        for _ in range(400):
+            run()
+            if hc.room == rid and cc.room == rid and math.hypot(hc.x - cli.px, hc.y - cli.py) < 1.6:
+                break
+        return hc.room == rid
+
+    cli.enter_room("scullery", None)
+    run(30)
+    check(hc.state == "asleep", "next door to it: still nowhere to be seen")
+    cli.enter_room("coal_cellar", None)
+    for _ in range(300):
+        run()
+        if hc.state == "follow" and cc.state == "follow":
+            break
+    check(hc.follows == "client" and cc.follows == "client" and cc.state == "follow" and "wake" in cli_states,
+          f"the joiner finds it: it wakes and follows them, on both games ({hc.follows}/{cc.follows}, {cli_states})")
+    check(cli.sounds.requested.get("cat_mew", 0) >= 1 and not host.sounds.requested.get("cat_mew"),
+          "the joiner hears its mrrp (the host, in the hall, doesn't)")
+    check(walk_cli("scullery"), "the cat follows the joiner up into the Scullery")
+    run(20)
+    check(cc.room == hc.room and math.hypot(cc.x - hc.x, cc.y - hc.y) < 0.3 and (cc.set, cc.left) == (hc.set, hc.left),
+          f"the joiner sees it where the host has it ({cc.x:.2f},{cc.y:.2f} / {hc.x:.2f},{hc.y:.2f})")
+    host.enter_room("scullery", None)
+    wait(games, lambda: hc.follows == "host" and cc.follows == "host", 200)
+    check(hc.follows == "host" and cc.follows == "host", "both players in one room: it goes over to the other one")
+    run(150)
+    check(hc.follows == "host", "and only once per meeting")
+    host.enter_room("kitchen", None)
+    wait(games, lambda: hc.room == "kitchen", 400)
+    check(hc.room == "kitchen" and hc.follows == "host", "the host goes on: the cat goes with them")
+    host.enter_room("scullery", None)
+    wait(games, lambda: hc.follows == "client", 300)
+    check(hc.follows == "client", "they meet again: it switches back")
+    route = host.house.route("scullery", "lumber_room")
+    for rid in route[1:]:
+        if not walk_cli(rid):
+            break
+    check(hc.room == "lumber_room", f"the cat follows the joiner all the way up to the Lumber Room ({hc.room})")
+    for _ in range(200):
+        run()
+        if hc.hissed and cc.state != "hiss":
+            break
+    check(hc.hissed and cc.hissed and "hiss" in cli_states, f"it hisses at the mummy, on both games ({cli_states[-4:]})")
+    check(cli.sounds.requested.get("cat_hiss", 0) == 1, "the joiner hears one hiss")
+    mum = [e for e in (host.coop.other_enemies or []) if e.kind == "mummy"] or \
+        [e for e in cli.enemies if e.kind == "mummy"]
+    check(len(mum) >= 1, "the mummy is in there")
+    check(cc.state in ("lead", "wait", "atkey") and hc.state == cc.state, f"then it leads the joiner ({hc.state}/{cc.state})")
+    run(60)
+    check(cli_states.count("hiss") == 1, "just the once")
+    host.to_title()
+    cli.to_title()
+    step(games, 5)
+
     # ---- 3. disconnects mid-game
     host, cli, games = connect(screen, 7, PORT, via_scan=False)
     host.to_title()                          # host quits: says goodbye

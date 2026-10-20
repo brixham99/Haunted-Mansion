@@ -177,7 +177,8 @@ class Coop:
             self.send("s", p=self.my_pose())
             return
         p = self.partner
-        msg = {"p": self.my_pose(), "time": round(g.time, 2), "key": [g.key_state, g.key_pos, g.key_holder]}
+        msg = {"p": self.my_pose(), "time": round(g.time, 2), "key": [g.key_state, g.key_pos, g.key_holder],
+               "cat": g.cat.state_msg()}
         # the room the joiner is looking at: their own, or ours while they watch us
         rid = p.room if self.p_out is None else g.room.id
         if p.seen and rid in g.house.rooms:
@@ -222,6 +223,9 @@ class Coop:
         g.key_state, g.key_pos = ks, (tuple(kp) if kp else None)
         if len(key) > 2 and key[2] in ("host", "client", None):
             g.key_holder = key[2]             # who carries it: the host decides
+        cat = m.get("cat")
+        if isinstance(cat, list) and len(cat) == 9 and cat[0] in g.house.rooms:
+            g.cat.apply(cat)                  # the black cat: the host runs it
         if g.mode == "watch" and p.room != g.room.id:
             g.watch_room(p.room)
         if m.get("room") == g.room.id and not g.fade:

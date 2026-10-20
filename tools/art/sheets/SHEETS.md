@@ -24,3 +24,10 @@ bat_flap.jpg (4x1): bat animation: wings up, wings outstretched, wings down, win
 skeleton_walk.jpg (4x1): skeleton walk, purple coat, 3/4 view walking to screen right: stride, legs together, other stride, jolt  (cut by tools/cut_anims.py -> assets/art/skeleton_walk_1..4.png; boots on one ground line; mirrored in the game when walking to screen left, like every enemy)
 vampire.jpg (4x1, 1280x720): floating Victorian vampire, black tailcoat and red-lined cape, hovering, feet hanging: cape flared, settling, settled, lifting  (cut by tools/cut_anims.py -> assets/art/vampire_1..4.png at the skeleton's height; head and shoulders centred, halo and cape-tip specks cleaned; looped at 6 fps, mirrored to screen left; NO shadow drawn)
 kitchen_island (no sheet): Victorian kitchen island, green-painted cupboard base (the dresser's faces recoloured) under a butcher-block top with bread board, loaf, bowl and pan; BUILT by `python3 tools/iso_box.py --build` (3x3 tiles, solid, no floor shadow)
+
+## The mummy and the black cat (cut by tools/cut_anims.py)
+
+- `mummy_se.jpg`, `mummy_ne.jpg`: the Lumber Room mummy's four-frame shamble, arms straight out, front 3/4 (walking to the lower right) and back 3/4 (to the upper right). Mirrored in the game for the other two directions.
+- `cat_e.jpg`, `cat_se.jpg`, `cat_s.jpg`, `cat_ne.jpg`, `cat_n.jpg`: the black cat's four-frame walk in five views. Mirrored, they give eight directions.
+- `cat_poses.jpg`: sit, hiss (arched), curled up asleep, welcome stretch (front 3/4).
+- `cat_poses_back.jpg`: sit, tail flick, bristling, bristling (from behind, facing the upper right).

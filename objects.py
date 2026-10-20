@@ -139,6 +139,7 @@ ENEMY_STATS = {
     "skeleton": dict(speed=1.4, sense=5.0, floats=False, r=0.30, z=0),
     "monster": dict(speed=1.0, sense=6.0, floats=False, r=0.36, z=0),
     "vampire": dict(speed=1.15, sense=5.0, floats=True, r=0.30, z=44),   # hovers, drifts, glides at you
+    "mummy": dict(speed=0.95, sense=4.0, floats=False, r=0.32, z=0),     # shambles, arms out; Lumber Room only
 }
 
 # British English flavour text when a search finds nothing.

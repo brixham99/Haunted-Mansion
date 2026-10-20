@@ -218,7 +218,7 @@ ROOMS = {
     "lumber_room": R("Lumber Room", "loft", (0, 0), (8, 7), "loft",
         furn=[("crate", 0, 0, "E"), ("crate", 1, 0, "S"), ("crate", 0, 1, "E"), ("wardrobe", 3, 0, "S"),
               ("armchair", 6, 5, "auto"), ("chair", 5, 1, "auto"), ("trunk", 0, 5, "E")],
-        wall=[("painting", "W", 3)], enemies=["goblin"]),
+        wall=[("painting", "W", 3)], enemies=["mummy"]),
     "water_tank_loft": R("Water Tank Loft", "loft", (2, 0), (7, 7), "loft",
         furn=[("water_tank", 4, 0, "S"), ("crate", 0, 5, "S"), ("barrel", 0, 0, "E")],
         wall=[("cobweb", "W", 5)], enemies=["bat"]),

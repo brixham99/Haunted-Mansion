@@ -34,5 +34,113 @@
    93.8,
    198.1
   ]
+ },
+ "mummy_se": {
+  "frames": 4,
+  "size": [
+   121,
+   192
+  ],
+  "sheet": "mummy_se.jpg",
+  "anchor": [
+   60.8,
+   189.9
+  ]
+ },
+ "mummy_ne": {
+  "frames": 4,
+  "size": [
+   123,
+   195
+  ],
+  "sheet": "mummy_ne.jpg",
+  "anchor": [
+   61.9,
+   192.5
+  ]
+ },
+ "cat_se": {
+  "frames": 4,
+  "size": [
+   59,
+   76
+  ],
+  "sheet": "cat_se.jpg",
+  "anchor": [
+   22.6,
+   75.2
+  ]
+ },
+ "cat_ne": {
+  "frames": 4,
+  "size": [
+   52,
+   78
+  ],
+  "sheet": "cat_ne.jpg",
+  "anchor": [
+   35.2,
+   77.0
+  ]
+ },
+ "cat_e": {
+  "frames": 4,
+  "size": [
+   100,
+   86
+  ],
+  "sheet": "cat_e.jpg",
+  "anchor": [
+   48.7,
+   84.3
+  ]
+ },
+ "cat_s": {
+  "frames": 4,
+  "size": [
+   24,
+   79
+  ],
+  "sheet": "cat_s.jpg",
+  "anchor": [
+   12.1,
+   77.9
+  ]
+ },
+ "cat_n": {
+  "frames": 4,
+  "size": [
+   41,
+   77
+  ],
+  "sheet": "cat_n.jpg",
+  "anchor": [
+   21.8,
+   75.7
+  ]
+ },
+ "cat_poses": {
+  "frames": 4,
+  "size": [
+   70,
+   84
+  ],
+  "sheet": "cat_poses.jpg",
+  "anchor": [
+   26.5,
+   83.4
+  ]
+ },
+ "cat_poses_back": {
+  "frames": 4,
+  "size": [
+   45,
+   70
+  ],
+  "sheet": "cat_poses_back.jpg",
+  "anchor": [
+   24.2,
+   69.2
+  ]
  }
 }

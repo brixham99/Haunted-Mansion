@@ -729,6 +729,222 @@ def grand_stairs_checks(g):
           f"{len(grand.layers(g, hall))}+{len(grand.layers(g, land))} layers")
 
 
+def _cat_run(g, secs, dt=0.05, until=None, chase=False):
+    """Run the cat (and, if chase, a player who keeps up with it: into its
+    room and a tile behind it). Returns the states it went through."""
+    seen = []
+    for _ in range(int(secs / dt)):
+        g.update_cat(dt)
+        c = g.cat
+        if not seen or seen[-1] != c.state:
+            seen.append(c.state)
+        if until and until(c):
+            break
+        if chase:
+            if c.room != g.room.id:
+                g.enter_room(c.room, None)
+                g.fade, g.enemies = None, []
+                g.px, g.py = c.x, c.y
+            else:
+                g.px += (c.x - g.px) * min(1.0, dt * 3.0)
+                g.py += (c.y - g.py) * min(1.0, dt * 3.0)
+    return seen
+
+
+def _goto(g, rid, xy=None):
+    g.enter_room(rid, None)
+    g.fade, g.enemies = None, []
+    if xy:
+        g.px, g.py = xy
+
+
+def mummy_checks(g):
+    """The Lumber Room mummy: there and nowhere else, animated in four
+    views, slow, hurts on contact, never leaves the room, grunts."""
+    homes = [rid for rid, r in g.house.rooms.items() if "mummy" in r.enemies]
+    check(homes == ["lumber_room"], f"the mummy lives in the Lumber Room only ({homes})")
+    for kind in ("mummy", "mummy_ne"):
+        for left in (False, True):
+            fr = [g.art.enemy_frame(kind, i, left) for i in range(4)]
+            check(all(f is not None for f in fr) and len({f[0].get_size() for f in fr}) == 1,
+                  f"{kind}: 4 walk frames ({'left' if left else 'right'})")
+    skel = g.art.enemy_frame("skeleton", 1, False)[0]
+    mum = g.art.enemy_frame("mummy", 1, False)[0]
+    check(abs(_figure_h(mum) - _figure_h(skel)) <= 0.12 * _figure_h(skel), f"about the skeleton's height ({_figure_h(mum)} px)")
+    e = G.Enemy("mummy", 3.5, 3.5, g.rng)
+    check(not e.floats and e.speed < G.Enemy("skeleton", 0, 0, g.rng).speed, "the mummy walks, slower than the skeleton")
+    g.new_game(3)
+    g.mode = "play"
+    god, g.god = g.god, False
+    _goto(g, "lumber_room", (6.5, 5.5))
+    r = g.room
+    on, g.enemies_on = g.enemies_on, True
+    ms = [e for e in g.make_enemies(r, 6.5, 5.5) if e.kind == "mummy"]
+    g.enemies_on = on
+    if not check(len(ms) == 1, "one mummy in the Lumber Room"):
+        return
+    m = ms[0]
+    g.enemies = [m]
+    views, frames, worst = set(), set(), 0.0
+    g.lives, g.invuln = 99, 0.0
+    hurt0 = g.lives
+    rng = random.Random(5)
+    for i in range(int(90 / DT)):            # 90 s, the player drifting about the room
+        if i % 120 == 0:
+            c = rng.choice(r.free_floor())
+            g.px, g.py = c[0] + 0.5, c[1] + 0.5
+        g.grace = 0.0
+        g.invuln = max(0.0, g.invuln - DT)
+        g.update_enemies(DT)
+        if not g.enemies:                     # (a lost life puts the room's baddies back afresh)
+            g.enemies = [G.Enemy("mummy", 3.5, 3.5, g.rng)]
+        m = g.enemies[0]
+        check(m.kind == "mummy" and len(g.enemies) == 1, "only the mummy")
+        views.add((m.up, m.left))
+        frames.add(m.frame)
+        worst = max(worst, -m.x, -m.y, m.x - r.w, m.y - r.d)
+        if (int(m.x), int(m.y)) in r.solid_cells():
+            check(False, f"the mummy walked into furniture at {m.x:.2f},{m.y:.2f}")
+            break
+    check(worst <= 0, f"the mummy stays inside the Lumber Room over 90 s (worst {worst:.2f})")
+    check(len(views) == 4 and frames == {0, 1, 2, 3}, f"the mummy shows all four views and its four frames ({sorted(views)})")
+    check(g.lives < hurt0, "the mummy hurts on contact")
+    grunts = [n for n in g.sounds.requested if str(n).startswith("mummy_grunt")]
+    check(len(grunts) >= 1, "the mummy grunts now and then")
+    # it never gets out: the room's enemies stay in the room when the player leaves and comes back
+    _goto(g, "dusty_attic")
+    check(all(e.kind != "mummy" for e in g.enemies), "no mummy next door")
+    g.lives = G.LIVES
+    g.god = god
+
+
+def cat_checks(g):
+    """The black cat (cat.py): unseen until the Coal Cellar, wakes and
+    follows, hisses once at the mummy, leads to the key from anywhere, sits
+    at the door when you lag, back to following once you have the key."""
+    import cat as CAT
+    for s in ("cat_e", "cat_se", "cat_s", "cat_n", "cat_ne", "cat_poses", "cat_poses_back"):
+        for left in (False, True):
+            fr = [g.art.enemy_frame(s, i, left) for i in range(4)]
+            check(all(f is not None for f in fr) and len({f[0].get_size() for f in fr}) == 1, f"{s}: 4 frames")
+    check(len({CAT.view_for(math.cos(a), math.sin(a)) for a in [i * math.pi / 4 for i in range(8)]}) == 8,
+          "the cat walks in eight directions")
+    g.new_game(11)
+    g.mode = "play"
+    god, g.god = g.god, True
+    c = g.cat
+    check(c.room == "coal_cellar" and c.state == "asleep", "the cat starts asleep in the Coal Cellar")
+    for rid in g.house.rooms:                 # ---- absent until the Coal Cellar is entered
+        if rid == "coal_cellar":
+            continue
+        _goto(g, rid)
+        _cat_run(g, 0.3)
+        g.draw()
+    check(c.state == "asleep" and c.room == "coal_cellar" and c.follows is None,
+          "the cat stays asleep and unseen while nobody goes into the Coal Cellar")
+    check(not any(c.visible_in(rid) for rid in g.house.rooms if rid != "coal_cellar"), "and it is in no other room")
+    _goto(g, "scullery")
+    _goto(g, "coal_cellar", (5.5, 1.0))
+    st = _cat_run(g, 3.0)
+    check(st[0] == "wake" and c.state == "follow" and c.follows == "host",
+          f"found: it wakes, stretches and follows ({st})")
+    check("cat_mew" in g.sounds.requested, "with a little mrrp")
+    # ---- follows across rooms, never hisses outside the Lumber Room
+    route = g.house.route("coal_cellar", "lumber_room")
+    trail, hisses = [], []
+    for rid in route[1:]:
+        _goto(g, rid)
+        if rid == "lumber_room":
+            on, g.enemies_on = g.enemies_on, True
+            g.enemies = g.make_enemies(g.room, g.px, g.py)
+            g.enemies_on = on
+        st = _cat_run(g, 8.0, until=lambda c: c.room == rid and math.hypot(c.x - g.px, c.y - g.py) < CAT.FOLLOW_D + 0.4)
+        trail.append(c.room == rid)
+        st += _cat_run(g, 1.5)
+        hisses += [rid] * st.count("hiss")
+        if rid != "lumber_room":
+            check(c.state == "follow", f"{rid}: following (state {c.state})")
+    check(all(trail), f"the cat follows from room to room ({sum(trail)}/{len(trail)})")
+    check(c.hissed and hisses == ["lumber_room"], f"in the Lumber Room (only) it hisses at the mummy ({hisses})")
+    check("cat_hiss" in g.sounds.requested, "the hiss is heard")
+    st = _cat_run(g, 3.0)
+    check(c.state in ("lead", "wait", "atkey"), f"then it leads the way ({c.state})")
+    _goto(g, "dusty_attic")
+    _cat_run(g, 30.0, until=lambda c: c.room == "dusty_attic")
+    _goto(g, "lumber_room")
+    st = _cat_run(g, 6.0, chase=True)
+    check("hiss" not in st, f"it hisses only once ({st})")
+    # ---- leads to the key from every room (several key spots)
+    house = g.house
+    keys = []
+    for rid in sorted(house.rooms):
+        ps = [p for p in house.open_places() if p[0] == rid]
+        if ps:
+            keys.append(ps[len(ps) // 2])
+    hidden = [p for p in house.hiding_places() if p[1] != "open" and house.obtainable(p)]
+    keys = random.Random(9).sample(keys, 5) + random.Random(4).sample(hidden, 3)
+    ok = total = 0
+    worst = 0.0
+    for kp in keys:
+        for start in sorted(house.rooms):
+            g.key_place = kp
+            g.key_state = "revealed" if kp[1] == "open" else "hidden"
+            g.key_pos = (kp[2][0] + 0.5, kp[2][1] + 0.5) if kp[1] == "open" else None
+            c.room, c.hissed, c.follows, c.lagging, c.apart = start, True, "host", False, 0.0
+            c.set_state("lead")
+            r = house.rooms[start]
+            e = house.entry_points(r)[0]
+            c.x, c.y = e[0] + 0.5, e[1] + 0.5
+            _goto(g, start, (c.x, c.y))
+            t0 = time.time()
+            _cat_run(g, 400.0, dt=0.1, chase=True, until=lambda c: c.state == "atkey")
+            worst = max(worst, time.time() - t0)
+            total += 1
+            rid, spot, _o = CAT.key_spot(g)
+            good = c.state == "atkey" and c.room == kp[0] and math.hypot(c.x - spot[0], c.y - spot[1]) < 0.2
+            ok += good
+            if not good:
+                check(False, f"from {start} the cat did not lead to the key at {kp} (in {c.room}, {c.state})")
+    check(ok == total, f"the cat leads to the key from every room ({ok}/{total})")
+    print(f"cat: led to the key {ok}/{total} times ({len(keys)} key spots x {len(house.rooms)} start rooms)")
+    # ---- the player lags: it goes back to the doorway, sits facing their room, then carries on
+    kp = next(p for p in house.open_places() if p[0] == "library") if any(p[0] == "library" for p in house.open_places())         else house.open_places()[0]
+    g.key_place, g.key_state, g.key_pos = kp, "revealed", (kp[2][0] + 0.5, kp[2][1] + 0.5)
+    start = house.route(kp[0], M.START_ROOM)[-1]
+    path = house.route(start, kp[0])
+    c.room, c.lagging, c.apart = start, False, 0.0
+    c.set_state("lead")
+    _goto(g, start, house.rooms[start].door_entry("S") if "S" in house.rooms[start].doors else None)
+    c.x, c.y = g.px, g.py
+    _cat_run(g, 60.0, chase=True, until=lambda c: c.room == path[1])
+    check(c.room == path[1], f"the cat leads on into {path[1]}")
+    st = _cat_run(g, CAT.LAG_S + 8.0)           # we stay behind in the first room
+    w = CAT.way(house, c.room, start)
+    check(c.state == "wait" and math.hypot(c.x - w[0][0], c.y - w[0][1]) < 0.15,
+          f"left behind: it goes back to the doorway and sits ({c.state} at {c.x:.2f},{c.y:.2f}; door {w[0]})")
+    sx, sy = CAT.screen_dir(*w[2])
+    check(c.left == (sx < 0) and c.set == ("cat_poses_back" if sy < 0 else "cat_poses"), "sitting facing our room")
+    _goto(g, path[1], w[0])
+    st = _cat_run(g, 3.0, chase=True)
+    check("lead" in st, f"we come through: it carries on ({st})")
+    # falls well behind in the same room: sits and waits, then on again
+    c.room, c.x, c.y = start, 0.5, 0.5
+    c.set_state("lead")
+    c.lagging = False
+    r = house.rooms[start]
+    _goto(g, start, (r.w - 0.6, r.d - 0.6))
+    c.x, c.y = 0.6, 0.6
+    if math.hypot(g.px - c.x, g.py - c.y) > CAT.FAR_D:
+        _cat_run(g, 0.5)
+        check(c.state == "wait", f"the player well behind in the room: it sits and waits ({c.state})")
+    _cat_run(g, 400.0, dt=0.1, chase=True, until=lambda c: c.state == "atkey")
+    check(c.state == "atkey", "and then leads on to the key")
+    g.key_state = "carried"
+    _cat_run(g, 0.5)
+    check(c.state == "follow", "key found: back to following")
+    g.god = god
+
+
 def vampire_checks(g):
     """The Crypt's vampire: a floater, animated, hovering, with a soft shadow that shrinks with height."""
     import numpy as np
@@ -960,6 +1176,8 @@ def main():
     kitchen_checks(g.house)
     safe_room_checks(g)
     vampire_checks(g)
+    mummy_checks(g)
+    cat_checks(g)
     grand_stairs_checks(g)
     # ---- full tour with enemies (invulnerable)
     if not args.quick:

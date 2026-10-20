@@ -7,6 +7,10 @@ Sheets (tools/art/sheets/, white background, four frames left to right):
   bat_flap.jpg       wings up, wings outstretched, wings down, wings folded
   skeleton_walk.jpg  stride, legs together, other stride, jolt
   vampire.jpg        hovering: cape flared, settled, flared, settled
+  mummy_se/ne.jpg    the mummy's shamble, front and back 3/4 (arms out)
+  cat_se/ne/e/s/n.jpg the black cat's walk in five views (mirrored: eight)
+  cat_poses.jpg      sit, hiss, curled up asleep, welcome stretch (front 3/4)
+  cat_poses_back.jpg sit, tail flick, bristling, bristling (from behind)
 
 Background and soft edges use the same cutter as cut_sheets.py (border
 flood fill, enclosed flat-white pockets such as the gaps between the bat's
@@ -45,12 +49,27 @@ OUT = CS.OUT
 # The skeleton is drawn 20% taller than the old single sprite (165 px), so it
 # stands clearly over Archie and Holly (159 px); game.SKEL_FRAME_D scales too.
 SKELETON_H = 198
+MUMMY_H = 188             # a little shorter than the skeleton, hunched
 VAMPIRE_H = 196            # about the skeleton's height: he looms over Archie and Holly
 SETS = {
     # name: (sheet, reference frame index, ("w" | "h", in-game px of the reference frame))
     "bat": ("bat_flap.jpg", 1, ("w", 108)),
     "skeleton_walk": ("skeleton_walk.jpg", 1, ("h", SKELETON_H)),
     "vampire": ("vampire.jpg", 1, ("h", VAMPIRE_H)),
+    # the Lumber Room mummy: front 3/4 (walking to the lower right) and back 3/4
+    # (to the upper right); the game mirrors them for the other two directions
+    "mummy_se": ("mummy_se.jpg", 1, ("h", MUMMY_H)),
+    "mummy_ne": ("mummy_ne.jpg", 1, ("h", MUMMY_H)),
+    # the black cat: five walking views (mirrored in the game for eight
+    # directions) and its poses: sit, hiss, curled up asleep, welcome stretch
+    "cat_se": ("cat_se.jpg", 1, ("h", 74)),
+    "cat_ne": ("cat_ne.jpg", 1, ("h", 76)),
+    "cat_e": ("cat_e.jpg", 1, ("w", 92)),
+    "cat_s": ("cat_s.jpg", 1, ("h", 76)),
+    "cat_n": ("cat_n.jpg", 1, ("h", 74)),
+    "cat_poses": ("cat_poses.jpg", 0, ("h", 70)),
+    # seen from behind, facing the upper right: sit, sit (tail flicked), bristling, bristling
+    "cat_poses_back": ("cat_poses_back.jpg", 0, ("h", 68)),
 }
 HOLE_FLAT = 0.2            # the gaps between bones, coat and arm, wing fingers: small pockets of noisy JPEG white
 PAD = 6
@@ -91,6 +110,29 @@ def clean_tips(img, below=0.45):
         else:
             al[y, x] = 0
     return Image.fromarray(np.clip(a + 0.5, 0, 255).astype(np.uint8), "RGBA")
+
+
+def clear_pockets(img, min_px=30):
+    """Sheet white caught in small enclosed gaps (between the mummy's arms
+    and a dangling bandage): near-white, unsaturated blobs of at least
+    min_px become transparent (feathered by a pixel). The bandages are a
+    warm beige, well away from that white."""
+    import cv2
+    a = np.asarray(img).astype(np.float64).copy()
+    rgb, al = a[..., :3], a[..., 3]
+    white = (rgb.min(2) > 226) & (rgb.max(2) - rgb.min(2) < 16) & (al > 0)
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(white.astype(np.uint8), connectivity=4)
+    kill = np.zeros_like(white)
+    for i in range(1, n):
+        if stats[i, cv2.CC_STAT_AREA] >= min_px:
+            kill |= lab == i
+    if kill.any():
+        grow = cv2.dilate(kill.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
+        al[grow & ~kill] *= 0.5
+        al[kill] = 0
+        a = CS.defringe(Image.fromarray(np.clip(a + 0.5, 0, 255).astype(np.uint8), "RGBA"))
+        return a
+    return img
 
 
 def eye_centre(img):
@@ -138,10 +180,10 @@ def align(name, frames):
     up = max(ay for _, ay in anchors)
     down = max(f.height - ay for f, (_, ay) in zip(frames, anchors))
     W, H = int(np.ceil(left + right)) + 2 * PAD, int(np.ceil(up + down)) + 2 * PAD
-    if name == "skeleton_walk":
+    if name == "skeleton_walk" or name.startswith(("mummy", "cat")):
         H = int(np.ceil(up)) + 2 * PAD          # feet (the anchor) on the bottom edge, less the pad
     out = []
-    anchor = (PAD + left, H - PAD if name == "skeleton_walk" else PAD + up)
+    anchor = (PAD + left, H - PAD if name == "skeleton_walk" or name.startswith(("mummy", "cat")) else PAD + up)
     for f, (ax, ay) in zip(frames, anchors):
         c = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         c.alpha_composite(f, (int(round(PAD + left - ax)), int(round(PAD + up - ay))))
@@ -156,6 +198,8 @@ def main(argv):
         frames = cut_frames(sheet)
         if name == "vampire":
             frames = [clean_tips(f) for f in frames]
+        if name.startswith("mummy"):
+            frames = [clear_pockets(f) for f in frames]
         frames, anchor = align(name, frames)
         bb = frames[ref].split()[3].getbbox()
         ref_px = (bb[2] - bb[0]) if dim == "w" else (bb[3] - bb[1])
@@ -177,7 +221,9 @@ def main(argv):
 
 LABELS = {"bat": ("1 wings up", "2 outstretched", "3 wings down", "4 folded"),
           "skeleton_walk": ("1 stride", "2 legs together", "3 other stride", "4 jolt"),
-          "vampire": ("1 cape flared", "2 settled", "3 flared", "4 settled")}
+          "vampire": ("1 cape flared", "2 settled", "3 flared", "4 settled"),
+          "cat_poses": ("1 sit", "2 hiss", "3 curled up", "4 welcome stretch"),
+          "cat_poses_back": ("1 sit", "2 tail flick", "3 bristling", "4 bristling")}
 
 
 def strip(name, frames, size, anchor, path):

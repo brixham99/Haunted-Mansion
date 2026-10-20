@@ -32,6 +32,7 @@ import art
 import grand
 import roundroom
 import coop as C
+import cat as CAT
 import mansion as M
 import net
 import scores
@@ -57,7 +58,7 @@ CONTACT_SHADOW = {"chair": 0.2, "armchair": 0.16, "round_table": 0.2, "side_tabl
 # ENEMY_SHADOW_K x the sprite's width; fliers' pools shrink and fade with height.
 ENEMY_SHADOW_K = 0.46
 ENEMY_SHADOW_MAX = 58
-ENEMY_SHADOW_W = {"bat": 80, "skeleton": 96}   # animated frames: the body's width, not the frame's (wings, padding)
+ENEMY_SHADOW_W = {"bat": 80, "skeleton": 96, "mummy": 92}   # animated frames: the body's width, not the frame's (wings, padding)
 ENEMY_POOL_A = 125             # the pool (soft_shadow fades from the centre, so this reads light)
 ENEMY_CORE_A = 150             # a darker core under walkers, where the feet are
 FLY_SHADOW_Z = 90.0           # px of height that halves a flier's shadow
@@ -84,6 +85,12 @@ SKEL_FRAME_D = 0.36            # tiles walked per frame (stride, together, other
 SKEL_IDLE_S = 0.3              # standing this long -> the legs-together frame
 SKEL_JOLT_S = 0.1              # the 1-2 px drop on each footfall
 SKEL_CLACK_FAR = 9.0           # tiles: the footfall clack fades out by this distance
+# The mummy (Lumber Room): four shambling frames in a front and a back 3/4
+# view (e.up: walking up the screen), mirrored for screen left like the rest.
+MUMMY_FRAME_D = 0.3            # tiles per frame: a short, dragging stride
+MUMMY_GRUNT_S = (3.5, 8.0)     # s between its grunts
+MUMMY_GRUNT_FAR = 9.0          # tiles: the grunts fade out by this distance
+CAT_SHADOW_RX = 24             # the black cat's soft shadow (px)
 # The front door: once the key is carried and someone is in the Entrance Hall
 # it swings open (both leaves, inwards on their outer hinges) and stays open.
 DOOR_OPEN_S = 1.8              # length of the swing
@@ -146,7 +153,8 @@ SOUND_VOL = {"door_creak": 0.85, "ambience": 0.35, "rain_glass": 0.3, "title_the
              "push": 0.5, "ghost": 0.45, "goblin": 0.5, "bat": 0.35, "spider": 0.4, "skeleton": 0.5,
              "monster": 0.6, "stairs": 0.5, "rug": 0.5, "hurt": 0.5, "step1": 0.25, "step2": 0.25,
              "step3": 0.25, "ow_archie": 0.5, "ow_holly": 0.5, "skel_clack1": 0.3, "skel_clack2": 0.3,
-             "bat_flap": 0.22, "vampire": 0.3}
+             "bat_flap": 0.22, "vampire": 0.3, "mummy": 0.5, "mummy_grunt1": 0.45, "mummy_grunt2": 0.45,
+             "cat_hiss": 0.55, "cat_mew": 0.4}
 
 
 def load_font(size, bold=False, serif=False):
@@ -249,6 +257,7 @@ class Enemy:
         self.jolt = 0.0
         self.foot = 0
         self.flap_cd = 1.0
+        self.up = False                 # the mummy: walking up the screen (its back 3/4 view)
 
     def box(self):
         return (self.x - self.r, self.y - self.r, self.x + self.r, self.y + self.r)
@@ -468,6 +477,7 @@ class Game:
         self.door_t = None                # front door: None = shut, else seconds into its swing (open at DOOR_OPEN_S)
         self.key_holder = None            # two-player: who carries the key, "host" or "client" (None: the host)
         self.key_pos = None               # floor position once revealed
+        self.cat = CAT.Cat(self.house)    # asleep in the Coal Cellar until someone finds it (cat.py)
         if self.key_place[1] == "open":
             self.key_state = "revealed"
             self.key_pos = (self.key_place[2][0] + 0.5, self.key_place[2][1] + 0.5)
@@ -1102,6 +1112,8 @@ class Game:
             return
         if self.msg_t > 0:
             self.msg_t -= dt
+        if not self.paused and not (self.show_map and self.coop is None):
+            self.update_cat(dt)
         if self.mode == "watch":
             self.update_watch(dt)
             return
@@ -1474,6 +1486,28 @@ class Game:
         self.say(f"You go {M.LINK_VERB[obj.type]}: {M.FLOOR_NAMES[other.floor]}.")
         self.fade = ("out", 0.0, lambda: self.enter_room(other.id, ("link", partner)))
 
+    # ------------------------------------------------------------ the black cat
+    def update_cat(self, dt):
+        """The host (or a one-player game) runs the cat; the joiner eases it
+        towards what the host sends. Both play its sounds."""
+        if self.coop is not None and self.coop.client:
+            self.cat.ease(dt)
+        else:
+            self.cat.update(self, dt)
+        self.cat.sounds(self)
+
+    def draw_cat(self):
+        c = self.cat
+        fr = self.art.enemy_frame(c.set, c.frame, c.left)
+        cx, cy = self.P(c.x, c.y, self.room.floor_z(c.x, c.y))
+        sh = art.soft_shadow(CAT_SHADOW_RX, CAT_SHADOW_RX * 0.42, ENEMY_POOL_A)
+        self.screen.blit(sh, (round(cx - sh.get_width() / 2), round(cy - sh.get_height() / 2)))
+        if fr is None:
+            pygame.draw.ellipse(self.screen, (12, 10, 14), (cx - 16, cy - 22, 32, 22))
+            return
+        img, ax, ay = fr
+        self.screen.blit(img, (round(cx - ax), round(cy + 3 - ay)))
+
     # ------------------------------------------------------------ enemies
     def update_enemies(self, dt):
         if self.coop is not None and self.coop.client:
@@ -1498,6 +1532,36 @@ class Game:
                 self._animate_skeleton(e, dt)
             elif e.kind == "vampire":
                 e.frame = int(e.phase * VAMP_FPS) % 4     # hovering: the cape flares and settles
+            elif e.kind == "mummy":
+                self._animate_mummy(e, dt)
+
+    def _animate_mummy(self, e, dt):
+        """Frames from the distance shambled (like the skeleton's), the view
+        from which way up the screen it is heading, and a grunt now and then
+        (louder the nearer it is)."""
+        if e.anim_xy is not None:
+            dx, dy = e.x - e.anim_xy[0], e.y - e.anim_xy[1]
+            moved = math.hypot(dx, dy)
+        else:
+            dx = dy = moved = 0.0
+        e.anim_xy = (e.x, e.y)
+        if 1e-4 < moved < 1.0:
+            e.walk_d += moved
+            e.frame = int(e.walk_d / MUMMY_FRAME_D) % 4
+            if abs(dx + dy) > 1e-4:
+                e.up = (dx + dy) < 0
+            e.still = 0.0
+        else:
+            e.still += dt
+            if e.still >= SKEL_IDLE_S:
+                e.frame = 1
+        e.flap_cd -= dt
+        if e.flap_cd <= 0:
+            e.flap_cd = MUMMY_GRUNT_S[0] + (MUMMY_GRUNT_S[1] - MUMMY_GRUNT_S[0]) * ((e.phase * 3.17) % 1.0)
+            d = math.hypot(self.px - e.x, self.py - e.y)
+            if d < MUMMY_GRUNT_FAR and self.enemy_on_screen(e):
+                self.sounds.play("mummy_grunt1" if (e.phase * 5.3) % 1.0 < 0.5 else "mummy_grunt2",
+                                 0.25 + 0.75 * (1 - d / MUMMY_GRUNT_FAR) ** 1.5)
 
     def _animate_bat(self, e, dt):
         f = int(e.phase * BAT_FPS) % 4
@@ -1979,6 +2043,9 @@ class Game:
             items.append(((kx - .2, ky - .2, kx + .2, ky + .2), ("key",)))
         for e in self.enemies:
             items.append((e.box(), ("enemy", e)))
+        if self.cat.visible_in(r.id):
+            c = self.cat
+            items.append(((c.x - .18, c.y - .18, c.x + .18, c.y + .18), ("cat",)))
         if self.out is None:   # (two players: once out, we only watch)
             items.append((grand.figure_box(r, self.px, self.py, PLAYER_R), ("player",)))
         if self.coop is not None and self.coop.partner_here():
@@ -2356,6 +2423,8 @@ class Game:
             s.blit(img, (ex - img.get_width() / 2, ey - img.get_height() + 4))
         elif kind == "partner":
             self.draw_partner()
+        elif kind == "cat":
+            self.draw_cat()
         elif kind == "player":
             if self.invuln > 0 and int(self.invuln * 10) % 2 == 0:
                 return
@@ -2396,7 +2465,7 @@ class Game:
     def draw_anim_enemy(self, e):
         """The bat and the skeleton from their animation frames (False when
         there are none: the single painted sprite is used as before)."""
-        fr = self.art.enemy_frame(e.kind, e.frame, e.left)
+        fr = self.art.enemy_frame("mummy_ne" if e.kind == "mummy" and e.up else e.kind, e.frame, e.left)
         if fr is None:
             return False
         img, ax, ay = fr
