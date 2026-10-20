@@ -829,6 +829,17 @@ def cat_checks(g):
             check(all(f is not None for f in fr) and len({f[0].get_size() for f in fr}) == 1, f"{s}: 4 frames")
     check(len({CAT.view_for(math.cos(a), math.sin(a)) for a in [i * math.pi / 4 for i in range(8)]}) == 8,
           "the cat walks in eight directions")
+    import numpy as np
+    import cat_walk
+    check(abs(CAT.WALK_FRAME_D * CAT.WALK_FRAMES - cat_walk.CYCLE_TILES) < 1e-9 and CAT.WALK_FRAMES == cat_walk.FRAMES >= 6,
+          "the cat's frames follow the distance it walks (one cycle per cat_walk.CYCLE_TILES: no skating)")
+    for s in ("cat_e", "cat_se", "cat_s", "cat_n", "cat_ne"):
+        fr = [g.art.enemy_frame(s, i, False) for i in range(CAT.WALK_FRAMES)]
+        arrs = [pygame.surfarray.array_alpha(f[0]).astype(float) for f in fr]
+        diffs = [np.abs(a - b).mean() for a, b in zip(arrs, arrs[1:] + arrs[:1])]
+        check(len({f[0].get_size() for f in fr}) == 1 and len({(f[1], f[2]) for f in fr}) == 1,
+              f"{s}: {CAT.WALK_FRAMES} walk frames, one size and anchor")
+        check(min(diffs) > 0.5, f"{s}: every walk frame visibly differs from the next ({min(diffs):.2f})")
     g.new_game(11)
     g.mode = "play"
     god, g.god = g.god, True

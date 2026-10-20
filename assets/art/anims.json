@@ -60,64 +60,74 @@
   ]
  },
  "cat_se": {
-  "frames": 4,
+  "frames": 6,
   "size": [
-   59,
+   71,
    76
   ],
   "sheet": "cat_se.jpg",
   "anchor": [
-   22.6,
+   28.7,
    75.2
-  ]
+  ],
+  "walk_pad": 30,
+  "walk": "tools/cat_walk.py"
  },
  "cat_ne": {
-  "frames": 4,
+  "frames": 6,
   "size": [
-   52,
+   62,
    78
   ],
   "sheet": "cat_ne.jpg",
   "anchor": [
-   35.2,
+   40.4,
    77.0
-  ]
+  ],
+  "walk_pad": 30,
+  "walk": "tools/cat_walk.py"
  },
  "cat_e": {
-  "frames": 4,
+  "frames": 6,
   "size": [
-   100,
+   119,
    86
   ],
   "sheet": "cat_e.jpg",
   "anchor": [
-   48.7,
+   58.4,
    84.3
-  ]
+  ],
+  "walk_pad": 30,
+  "walk": "tools/cat_walk.py"
  },
  "cat_s": {
-  "frames": 4,
+  "frames": 6,
   "size": [
-   24,
+   33,
    79
   ],
   "sheet": "cat_s.jpg",
   "anchor": [
-   12.1,
+   16.4,
    77.9
-  ]
+  ],
+  "walk_pad": 30,
+  "walk": "tools/cat_walk.py"
  },
  "cat_n": {
-  "frames": 4,
+  "frames": 6,
   "size": [
-   41,
+   51,
    77
   ],
   "sheet": "cat_n.jpg",
   "anchor": [
-   21.8,
+   26.4,
    75.7
-  ]
+  ],
+  "walk_pad": 30,
+  "walk": "tools/cat_walk.py"
  },
  "cat_poses": {
   "frames": 4,

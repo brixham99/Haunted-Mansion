@@ -38,7 +38,8 @@ LOST_S = 25.0                   # s apart, sitting at the door: give up and go a
 CROSS_S = 6.0                   # s at most to get to a door when following (then it slips through)
 WAKE_S = (0.9, 1.0, 0.5)        # curled up, stretching, sitting: then off it goes
 HISS_S = 2.2
-WALK_FRAME_D = 0.17             # tiles per walk frame (four-frame cycle)
+WALK_FRAMES = 6                 # tools/cat_walk.py: one stride (both diagonal pairs) in six frames
+WALK_FRAME_D = 0.5 / WALK_FRAMES   # tiles per frame: cat_walk.CYCLE_TILES a cycle, so planted paws don't skate
 SIT_FLICK_S = 3.0               # sitting from behind: the tail flicks every so often
 
 # eight screen directions -> (frame set, mirrored); 0 = screen right, clockwise
@@ -356,7 +357,7 @@ class Cat:
                 pass
         self.walk_d += min(step, n)
         self.set, self.left = view_for(vx, vy)
-        self.frame = int(self.walk_d / WALK_FRAME_D) % 4
+        self.frame = int(self.walk_d / WALK_FRAME_D) % WALK_FRAMES
         self.look = (vx, vy)
         return math.hypot(gx - self.x, gy - self.y) <= stop
 

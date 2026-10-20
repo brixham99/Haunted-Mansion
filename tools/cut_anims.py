@@ -217,6 +217,8 @@ def main(argv):
             strip(name, frames, size, anchor, os.path.join(strips, f"{name}_strip.png"))
     with open(os.path.join(OUT, "anims.json"), "w") as fh:
         json.dump(meta, fh, indent=1)
+    import cat_walk                      # the cat's walk: six frames per view from one painted frame
+    cat_walk.main()
 
 
 LABELS = {"bat": ("1 wings up", "2 outstretched", "3 wings down", "4 folded"),
