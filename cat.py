@@ -13,8 +13,10 @@ arches its back and hisses at the mummy. After that it leads that player,
 room by room along the shortest way through the doors, stairs and ladders,
 to the room with the key and then to the key's spot, and sits there until
 the key is picked up. If the player lags (doesn't come through the door
-within LAG_S, or falls well behind) it goes back to the doorway on the
-route and sits facing the player's room until they come, then carries on.
+It never goes ahead: in each room on the route it goes to the way out it
+wants, sits beside it inside the room facing the doorway and waits; only
+when its player has gone through (that way or any other) does it follow,
+just behind, and lead on from the room they are in.
 Once the key is found it goes back to simply following.
 
 One player: the game runs it. Two players: the host runs it and sends
@@ -31,10 +33,6 @@ CAT_BED = (1.5, 3.5)            # curled up by the coal heap (the nearest free t
 FOLLOW_D = 1.15                 # tiles behind the player it settles
 FOLLOW_SPEED = 3.6              # tiles/s catching up (the player walks 3.0)
 LEAD_SPEED = 2.4                # tiles/s leading: a little slower than the player
-NEAR_D = 2.6                    # the player is this close: on we go
-FAR_D = 5.0                     # the player has fallen this far behind: wait for them
-LAG_S = 3.5                     # s without the player coming through the door: go back and sit
-LOST_S = 25.0                   # s apart, sitting at the door: give up and go and find them
 CROSS_S = 6.0                   # s at most to get to a door when following (then it slips through)
 WAKE_S = (0.9, 1.0, 0.5)        # curled up, stretching, sitting: then off it goes
 HISS_S = 2.2
@@ -119,8 +117,6 @@ class Cat:
         self.path = []
         self.path_goal = None
         self.path_t = 0.0
-        self.apart = 0.0        # leading: s the player hasn't been in our room
-        self.lagging = False
         self.cross_t = 0.0
         self.heard = "asleep"   # the last state sounds were played for (both sides)
         self.mummy_xy = None
@@ -180,7 +176,6 @@ class Cat:
                 self.look = (self.mummy_xy[0] - self.x, self.mummy_xy[1] - self.y)
             if self.t >= HISS_S:
                 self.set_state("lead" if g.key_state != "carried" else "follow")
-                self.apart = 0.0
             self.pose()
             return
         if not self.hissed and self.room == MUMMY_ROOM and tgt.room == MUMMY_ROOM and self.t > 0.3 \
@@ -247,77 +242,67 @@ class Cat:
 
     # ------------------------------------------------------------ leading
     def lead(self, g, tgt, dt):
+        """Show the way, one room at a time, never going ahead: in each room
+        on the route it goes to the way out it wants, sits beside it inside
+        the room facing the doorway, and waits. Only once its player has
+        gone through (that way, or any other) does it follow, just behind,
+        and in the new room it heads for the next way out. In the key's room
+        it goes to the key's spot and sits."""
         key_room, spot, obj = key_spot(g)
-        if tgt.room != self.room:
-            self.apart += dt
-            if self.apart >= LOST_S:                  # gone off elsewhere: go and find them
-                self.set_state("lead")
-                self.go_toward_room(g, tgt.room, FOLLOW_SPEED, dt)
-                if self.room == tgt.room:
-                    self.apart = 0.0
-                return
-            back = g.house.route(self.room, tgt.room)
-            w = way(g.house, self.room, back[1]) if len(back) > 1 else None
-            if w is None:
-                self.sit_toward(self.look)
-                return
-            (hx, hy), _arr, out = w
-            if self.apart < LAG_S:                    # a little way in, looking back for them
-                ix, iy = self.inward(g, hx, hy)
-                self.set_state("lead")
-                if self.walk_to(g, ix, iy, LEAD_SPEED, dt):
-                    self.sit_toward(out, state="lead")
-                return
-            if self.walk_to(g, hx, hy, FOLLOW_SPEED, dt):   # back to the doorway: sit, facing their room
-                self.set_state("wait")
-                self.sit_toward(out, state="wait")
+        if tgt.room != self.room:                     # they've gone through: after them
+            self.set_state("lead")
+            self.go_toward_room(g, tgt.room, FOLLOW_SPEED, dt)
+            return
+        self.cross_t = 0.0
+        if self.room == key_room:
+            if self.walk_to(g, spot[0], spot[1], LEAD_SPEED, dt, stop=0.05):
+                self.set_state("atkey")
+                look = (obj[0] - self.x, obj[1] - self.y) if obj else (tgt.x - self.x, tgt.y - self.y)
+                self.sit_toward(look, state="atkey")
             else:
                 self.set_state("lead")
             return
-        self.apart = 0.0
-        d = math.hypot(tgt.x - self.x, tgt.y - self.y)
-        if self.lagging and d < NEAR_D:
-            self.lagging = False
-        elif not self.lagging and d > FAR_D:
-            self.lagging = True
-        if self.lagging:                              # fallen well behind: sit and wait for them
-            self.set_state("wait")
-            self.sit_toward((tgt.x - self.x, tgt.y - self.y), state="wait")
+        r = g.house.route(self.room, key_room)
+        w = way(g.house, self.room, r[1])
+        if w is None:
+            self.sit_toward(self.look)
             return
-        if self.room != key_room:
-            r = g.house.route(self.room, key_room)
-            w = way(g.house, self.room, r[1])
-            if w is None:
-                return
-            (hx, hy), arrive, out = w
-            if self.walk_to(g, hx, hy, LEAD_SPEED, dt):
-                if math.hypot(tgt.x - hx, tgt.y - hy) < NEAR_D:
-                    self.set_state("lead")
-                    self.cross(r[1], arrive)
-                else:
-                    self.set_state("lead")
-                    self.sit_toward((tgt.x - self.x, tgt.y - self.y), state="lead")
-            else:
-                self.set_state("lead")
-            return
-        if self.walk_to(g, spot[0], spot[1], LEAD_SPEED, dt, stop=0.05):
-            self.set_state("atkey")
-            look = (obj[0] - self.x, obj[1] - self.y) if obj else (tgt.x - self.x, tgt.y - self.y)
-            self.sit_toward(look, state="atkey")
+        (hx, hy), _arrive, out = w
+        sx, sy = self.beside(g, hx, hy, out)
+        if self.walk_to(g, sx, sy, LEAD_SPEED, dt, stop=0.06):
+            self.set_state("wait")                    # sitting by the way out, waiting for them
+            self.sit_toward(out, state="wait")
         else:
             self.set_state("lead")
 
-    def inward(self, g, hx, hy):
+    def exit_seat(self, g):
+        """Leading: (room, seat point, way out direction, next room) where it waits now, or None."""
+        key_room = key_spot(g)[0]
+        if self.room == key_room:
+            return None
+        r = g.house.route(self.room, key_room)
+        w = way(g.house, self.room, r[1])
+        if w is None:
+            return None
+        (hx, hy), _a, out = w
+        return self.room, self.beside(g, hx, hy, out), out, r[1]
+
+    def beside(self, g, hx, hy, out):
+        """A seat just inside the room next to the way out (hx, hy): half a
+        tile further in and a tile to one side, so the doorway stays clear;
+        the doorway point itself if neither side is free floor."""
         r = g.house.rooms[self.room]
-        cx, cy = r.w / 2.0, r.d / 2.0
-        vx, vy = cx - hx, cy - hy
-        n = math.hypot(vx, vy) or 1.0
-        k = min(1.3, n * 0.6)
-        x, y = hx + vx / n * k, hy + vy / n * k
+        ox, oy = out
+        n = math.hypot(ox, oy) or 1.0
+        ox, oy = ox / n, oy / n
         solid = r.solid_cells()
-        if (int(x), int(y)) in solid or not r.inside((int(x), int(y))):
-            return hx, hy
-        return x, y
+        for side in (1.0, -1.0):
+            px, py = -oy * side, ox * side
+            x, y = hx - ox * 0.5 + px * 1.0, hy - oy * 0.5 + py * 1.0
+            c = (int(x), int(y))
+            if 0.3 <= x <= r.w - 0.3 and 0.3 <= y <= r.d - 0.3 and r.inside(c) and c not in solid:
+                return x, y
+        return hx - ox * 0.4, hy - oy * 0.4
 
     # ------------------------------------------------------------ moving and posing
     def walk_to(self, g, gx, gy, speed, dt, stop=0.08):

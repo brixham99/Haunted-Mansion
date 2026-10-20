@@ -885,8 +885,42 @@ def cat_checks(g):
     _goto(g, "lumber_room")
     st = _cat_run(g, 6.0, chase=True)
     check("hiss" not in st, f"it hisses only once ({st})")
-    # ---- leads to the key from every room (several key spots)
+    # ---- leading: never ahead of its player; waits by the right exit in every room; reaches the key from anywhere
     house = g.house
+
+    def lead_walk(limit=600.0, dt=0.1, astray=None):
+        """The player goes with the cat: up to it, then through the way out
+        it waits by (or, once, through the way named by astray). Checks it
+        never gets into a room before the player. Returns (ok, waits, ahead)."""
+        waits, ahead, last = [], [], c.room
+        stray = astray
+        for _ in range(int(limit / dt)):
+            g.update_cat(dt)
+            if c.room != last:
+                if c.room != g.room.id:
+                    ahead.append((last, c.room, g.room.id))
+                last = c.room
+            if c.state == "atkey":
+                return True, waits, ahead
+            if c.room != g.room.id:
+                continue
+            if c.state == "wait":
+                seat = c.exit_seat(g)
+                if seat is None:
+                    continue
+                rid, (sx, sy), out, nxt = seat
+                good = math.hypot(c.x - sx, c.y - sy) < 0.15 and c.room == rid
+                w = CAT.way(house, rid, nxt)
+                waits.append((rid, nxt, good, math.hypot(c.x - w[0][0], c.y - w[0][1])))
+                if stray:                              # off through another door instead
+                    nxt, stray = stray, None
+                    w = CAT.way(house, rid, nxt)
+                _goto(g, nxt, w[1])
+                continue
+            g.px += (c.x - g.px) * min(1.0, dt * 2.0)
+            g.py += (c.y - g.py) * min(1.0, dt * 2.0)
+        return False, waits, ahead
+
     keys = []
     for rid in sorted(house.rooms):
         ps = [p for p in house.open_places() if p[0] == rid]
@@ -895,61 +929,51 @@ def cat_checks(g):
     hidden = [p for p in house.hiding_places() if p[1] != "open" and house.obtainable(p)]
     keys = random.Random(9).sample(keys, 5) + random.Random(4).sample(hidden, 3)
     ok = total = 0
-    worst = 0.0
+    bad_waits, aheads = [], []
     for kp in keys:
         for start in sorted(house.rooms):
             g.key_place = kp
             g.key_state = "revealed" if kp[1] == "open" else "hidden"
             g.key_pos = (kp[2][0] + 0.5, kp[2][1] + 0.5) if kp[1] == "open" else None
-            c.room, c.hissed, c.follows, c.lagging, c.apart = start, True, "host", False, 0.0
+            c.room, c.hissed, c.follows = start, True, "host"
             c.set_state("lead")
-            r = house.rooms[start]
-            e = house.entry_points(r)[0]
+            e = house.entry_points(house.rooms[start])[0]
             c.x, c.y = e[0] + 0.5, e[1] + 0.5
             _goto(g, start, (c.x, c.y))
-            t0 = time.time()
-            _cat_run(g, 400.0, dt=0.1, chase=True, until=lambda c: c.state == "atkey")
-            worst = max(worst, time.time() - t0)
+            done, waits, ahead = lead_walk()
             total += 1
             rid, spot, _o = CAT.key_spot(g)
-            good = c.state == "atkey" and c.room == kp[0] and math.hypot(c.x - spot[0], c.y - spot[1]) < 0.2
+            good = done and c.room == kp[0] and math.hypot(c.x - spot[0], c.y - spot[1]) < 0.2
             ok += good
-            if not good:
-                check(False, f"from {start} the cat did not lead to the key at {kp} (in {c.room}, {c.state})")
+            bad_waits += [w for w in waits if not w[2] or w[3] > 1.6]
+            aheads += ahead
+            want = len(house.route(start, kp[0])) - 1
+            if not good or len(waits) != want:
+                check(False, f"from {start} to the key at {kp}: {c.room} {c.state}, waited {len(waits)} times (route {want})")
     check(ok == total, f"the cat leads to the key from every room ({ok}/{total})")
+    check(not aheads, f"leading, it is never in a room before its player ({aheads[:3]})")
+    check(not bad_waits, f"in every room it waits by the exit on the route, inside the room ({bad_waits[:3]})")
     print(f"cat: led to the key {ok}/{total} times ({len(keys)} key spots x {len(house.rooms)} start rooms)")
-    # ---- the player lags: it goes back to the doorway, sits facing their room, then carries on
-    kp = next(p for p in house.open_places() if p[0] == "library") if any(p[0] == "library" for p in house.open_places())         else house.open_places()[0]
+    # ---- the player hangs back: it just keeps waiting by the door, in its own room
+    kp = next(p for p in house.open_places() if p[0] == "library")
     g.key_place, g.key_state, g.key_pos = kp, "revealed", (kp[2][0] + 0.5, kp[2][1] + 0.5)
-    start = house.route(kp[0], M.START_ROOM)[-1]
-    path = house.route(start, kp[0])
-    c.room, c.lagging, c.apart = start, False, 0.0
+    start = "staircase_hall"
+    route = house.route(start, kp[0])
+    c.room, c.x, c.y = start, 4.0, 6.5
     c.set_state("lead")
-    _goto(g, start, house.rooms[start].door_entry("S") if "S" in house.rooms[start].doors else None)
-    c.x, c.y = g.px, g.py
-    _cat_run(g, 60.0, chase=True, until=lambda c: c.room == path[1])
-    check(c.room == path[1], f"the cat leads on into {path[1]}")
-    st = _cat_run(g, CAT.LAG_S + 8.0)           # we stay behind in the first room
-    w = CAT.way(house, c.room, start)
-    check(c.state == "wait" and math.hypot(c.x - w[0][0], c.y - w[0][1]) < 0.15,
-          f"left behind: it goes back to the doorway and sits ({c.state} at {c.x:.2f},{c.y:.2f}; door {w[0]})")
-    sx, sy = CAT.screen_dir(*w[2])
-    check(c.left == (sx < 0) and c.set == ("cat_poses_back" if sy < 0 else "cat_poses"), "sitting facing our room")
-    _goto(g, path[1], w[0])
-    st = _cat_run(g, 3.0, chase=True)
-    check("lead" in st, f"we come through: it carries on ({st})")
-    # falls well behind in the same room: sits and waits, then on again
-    c.room, c.x, c.y = start, 0.5, 0.5
-    c.set_state("lead")
-    c.lagging = False
-    r = house.rooms[start]
-    _goto(g, start, (r.w - 0.6, r.d - 0.6))
-    c.x, c.y = 0.6, 0.6
-    if math.hypot(g.px - c.x, g.py - c.y) > CAT.FAR_D:
-        _cat_run(g, 0.5)
-        check(c.state == "wait", f"the player well behind in the room: it sits and waits ({c.state})")
-    _cat_run(g, 400.0, dt=0.1, chase=True, until=lambda c: c.state == "atkey")
-    check(c.state == "atkey", "and then leads on to the key")
+    _goto(g, start, (4.0, 7.0))
+    st = _cat_run(g, 40.0)
+    seat = c.exit_seat(g)
+    check(c.room == start and c.state == "wait" and seat and seat[3] == route[1]
+          and math.hypot(c.x - seat[1][0], c.y - seat[1][1]) < 0.15,
+          f"left behind: it sits by the way out to {route[1]} and waits, in the same room ({c.room}, {c.state}, {st})")
+    sx, sy = CAT.screen_dir(*seat[2])
+    check(c.left == (sx < 0) and c.set == ("cat_poses_back" if sy < 0 else "cat_poses"), "facing the doorway")
+    # through a different door: it follows them and leads on from there
+    others = [n for n in house.room_graph()[start] if n != route[1] and CAT.way(house, start, n)]
+    done, waits, ahead = lead_walk(astray=others[0])
+    check(done and not ahead and waits and waits[1][0] == others[0],
+          f"the player goes off through another door ({others[0]}): it follows and leads on from there ({waits[:2]})")
     g.key_state = "carried"
     _cat_run(g, 0.5)
     check(c.state == "follow", "key found: back to following")
