@@ -73,11 +73,11 @@ ENEMY_BOB_RATE = 8.0 * ENEMY_SPEED_SCALE ** 0.5   # walkers' step bob follows th
 BAT_FPS = 9.0                  # wing beat: up, outstretched, down, folded, looped
 # The vampire: four hovering frames (cape flared, settled, ...) looped at
 # VAMP_FPS, the whole figure bobbing slowly VAMP_BOB px about its hover height
-# (ENEMY_STATS z). He casts the soft floater shadow (it is reflections vampires lack).
+# (ENEMY_STATS z). Like the folklore says, he casts no shadow.
 VAMP_FPS = 6.0
 VAMP_BOB = 6.0
 VAMP_BOB_RATE = 1.6            # rad/s: a slow rise and fall
-NO_SHADOW = set()
+NO_SHADOW = {"vampire"}
 BAT_BOB = 3.0                  # px; the body rises on the downstroke, in step with the frames
 BAT_FLAP_NEAR = 3.5            # tiles: the leathery flap is only heard this close
 SKEL_FRAME_D = 0.36            # tiles walked per frame (stride, together, other stride, jolt): no foot slide
@@ -2470,9 +2470,8 @@ class Game:
             return False
         img, ax, ay = fr
         s = self.screen
-        if e.kind == "vampire":    # hovering, bobbing slowly; a soft shadow shows his height
+        if e.kind == "vampire":    # hovering, bobbing slowly; vampires cast no shadow
             z = e.z0 + VAMP_BOB * math.sin(e.phase * VAMP_BOB_RATE)
-            self.draw_enemy_shadow(e, z, ENEMY_SHADOW_W.get(e.kind, img.get_width()))
             ex, ey = self.P(e.x, e.y, z)
             s.blit(img, (round(ex - ax), round(ey - ay)))         # the anchor is where his feet hang
             return True

@@ -155,7 +155,7 @@ ROOMS = {
     "crypt": R("Crypt", "basement", (0, 0), (8, 8), "crypt",
         furn=[("coffin", 2, 1, "S"), ("coffin", 5, 1, "S"), ("tomb", 3, 5, "E"), ("candelabra", 0, 0, "E"),
               ("candelabra", 7, 0, "S"), ("statue", 0, 7, "E"), ("coffin", 0, 3, "E")],
-        wall=[("cobweb", "N", 4)], enemies=["skeleton", "ghost", "vampire"]),
+        wall=[("cobweb", "N", 4)], enemies=["vampire"]),
     "coal_cellar": R("Coal Cellar", "basement", (2, 0), (7, 7), "cellar",
         furn=[("ladder_up", 5, 0, "S", "scullery"), ("coal_heap", 0, 5, "E"), ("crate", 3, 3, "S"), ("barrel", 0, 0, "E")],
         wall=[("cobweb", "N", 2)], enemies=["spider"]),

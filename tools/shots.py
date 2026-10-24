@@ -50,7 +50,7 @@ def main():
     run(g, 0.2)
     shot(g, "hm_room_ground_library.png")
 
-    # Basement: the Crypt, a skeleton and a ghost closing in
+    # Basement: the Crypt, the vampire alone
     g.god = True
     g.new_game(11)
     g.mode = "play"
