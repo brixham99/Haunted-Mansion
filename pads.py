@@ -61,10 +61,17 @@ PAD_NAMES = {
 
 
 def axis_unit(value) -> float:
-    """SDL hands axes back as -32768..32767, or already as -1..1. Either is fine."""
-    v = float(value)
-    if abs(v) > 1.5:
-        v = v / 32767.0
+    """SDL hands axes back as -32768..32767, or already as -1..1.
+
+    Controller.get_axis gives whole numbers (-32768..32767); Joystick.get_axis
+    gives floats (-1..1). Tell them apart by type, not size: a resting stick can
+    read a raw 1 or -1, which must not count as a full tilt."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        v = value / 32767.0
+    else:
+        v = float(value)
+        if abs(v) > 1.5:
+            v /= 32767.0
     if v < -1.0:
         return -1.0
     if v > 1.0:

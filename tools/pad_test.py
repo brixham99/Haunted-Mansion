@@ -188,7 +188,8 @@ def test_pad_math():
     pad.set_axis(pads.AXIS_LEFTX, 0.0)
 
     other = box.attach_synthetic("PS4 Controller")
-    other.set_axis(pads.AXIS_LEFTX, 1)
+    other.set_axis(pads.AXIS_LEFTX, 1.0)
+    check(pads.axis_unit(1) == pads.axis_unit(-1) == 0.0 or abs(pads.axis_unit(1)) < 0.01, "a resting raw 1 is not a full tilt")
     other.set_button(pads.A, True)
     box.finish()
     check(pad.digital_move() == (0, 0), "the second pad does not move player 1")
