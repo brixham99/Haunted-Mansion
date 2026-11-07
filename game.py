@@ -8,6 +8,10 @@ Shot:  SDL_VIDEODRIVER=dummy python3 game.py --scene room --room library --scree
 Find the front door key, hidden somewhere new every game (in the open, under
 something you can move, or inside/behind furniture), then get back to the
 front door in the Entrance Hall. Native 1280x800, drawn at full resolution.
+
+A gamepad (Xbox or PlayStation) plays every screen; the keyboard is unchanged.
+ZENSTATION=1 or --fullscreen fills the TV with that 1280x800 picture, aspect
+kept, scaled by the display rather than by the CPU.
 """
 
 from __future__ import annotations
@@ -35,7 +39,9 @@ import coop as C
 import cat as CAT
 import mansion as M
 import net
+import pads
 import scores
+import screenfit
 from objects import (T, TILE_W, TILE_H, WALL_H, DOOR_H, ENEMY_STATS, SEARCH_LINES, SEARCH_PHRASE, nice)
 
 WIN_W, WIN_H = 1280, 800
@@ -117,6 +123,17 @@ TOP10_TIME = 7.0               # s the title screen shows the controls, then the
 BOARD_REFRESH = 3600.0         # re-fetch the Top 10 (and retry unsent scores) hourly
 TITLE_NAME = "Haunted Mansion"
 TITLE_OPTIONS = ("Play alone", "Host a game", "Join a game")
+# The title screen's control card, exactly as the keyboard shows it. A pad
+# replaces the whole card; with no pad these lines are what is drawn.
+KEYBOARD_CONTROLS = (
+    "Left / Right (or 1 / 2): choose character      Up / Down: alone, host or join      Enter: start",
+    "Left / Right (A / D): turn      Up / Down (W / S): walk forwards / backwards",
+    "Space / E: search or lift      Walk into chairs, chests and crates to push them",
+    "Tab / M: map      P: pause      Esc: title screen",
+)
+# High-score names, cycled from a pad: letters, then digits, then a space.
+# submit_name() still capitalises a lowercase first letter as they go on the board.
+NAME_CYCLE = "abcdefghijklmnopqrstuvwxyz0123456789 "
 COPYRIGHT = "\u00a92026 Nathan, Archie & Holly Anderson. Made in England."
 TITLE_BACKDROP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "art", "title_backdrop.jpg")
 TITLE_DIM = 0.64                  # the painting at ~64% brightness, before the vignette
@@ -424,7 +441,12 @@ class Game:
         self.show_top10 = False            # debug: keep the Top 10 on the title screen
         self.entry_active = False
         self.entry_name = ""
+        self.entry_cursor = 0          # pad name entry; the keyboard always edits at the end
         self.entry_note = ""
+        self.pads = None               # pads.Pads, set by main(); tests leave this empty
+        self._menu_repeat = pads.MenuRepeat()
+        self._pad_ctx = None
+        self._pad_dir = (0, 0)
         self.new_high = False
         self.best_score = self.board.high_score()
         # Two players over the network (coop.py); None in a one-player game
@@ -687,6 +709,7 @@ class Game:
                 if ch == " " and (not self.entry_name or self.entry_name.endswith(" ")):
                     continue
                 self.entry_name += ch
+        self.entry_cursor = len(self.entry_name)   # typing still adds at the end
 
     def entry_key(self, key):
         if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
@@ -704,6 +727,7 @@ class Game:
             self._stop_text()
         elif key == pygame.K_BACKSPACE:
             self.entry_name = self.entry_name[:-1]
+            self.entry_cursor = len(self.entry_name)
 
     @staticmethod
     def _stop_text():
@@ -736,6 +760,7 @@ class Game:
         self.entry_active = self.qualified
         if self.entry_active:
             self.entry_name = self.board.last_name
+            self.entry_cursor = len(self.entry_name)
             try:
                 pygame.key.start_text_input()
             except Exception:
@@ -790,6 +815,195 @@ class Game:
         turn = (1 if right else 0) - (1 if left else 0)
         move = 0 if turn else (1 if fwd else 0) - (1 if back else 0)
         return turn, move
+
+    # -------------------------------------------------------------- gamepad
+    def use_pad(self):
+        """True while a controller is plugged in (hints then name its buttons)."""
+        return self.pads is not None and self.pads.player(0) is not None
+
+    def btn(self, pad_key, keyboard):
+        """The on-screen name of a control: a pad button if one is connected, else the key."""
+        if not self.use_pad():
+            return keyboard
+        return self.pads.label(pad_key)
+
+    def control_lines(self):
+        """The title screen's control card. Keyboard text is KEYBOARD_CONTROLS, unchanged."""
+        if not self.use_pad():
+            return list(KEYBOARD_CONTROLS)
+        a = self.btn("A", "Enter")
+        b = self.btn("B", "Esc")
+        y = self.btn("Y", "Tab")
+        start = self.btn("START", "P")
+        back = self.btn("BACK", "Esc")
+        return [
+            f"Left / Right: Archie or Holly      Up / Down: alone, host or join      {a}: start",
+            "Left stick or D-pad: turn and walk",
+            f"{a}: search or lift      {y}: map      {start}: pause      {b}: title screen",
+            f"Hold {back} for a second: quit",
+        ]
+
+    def pause_caption(self):
+        if self.use_pad():
+            return f"Press {self.btn('START', 'P')} to carry on"
+        return "Press P to carry on"
+
+    def map_footer(self):
+        rooms = f"Rooms explored: {len(self.visited)} of {len(self.house.rooms)}"
+        if self.use_pad():
+            close = f"{self.btn('Y', 'Tab')}: close      {self.btn('B', 'Esc')}: back"
+        else:
+            close = "Tab / M: close"
+        return f"{rooms}      Arrows: stairs, ladders and trapdoors      {close}"
+
+    def name_hint(self):
+        base = f"Up to {scores.NAME_MAX} letters or numbers"
+        if not self.use_pad():
+            return f"{base}      Enter: send      Esc: skip"
+        return (f"{base}      Up / Down: letter      Left / Right: move      "
+                f"{self.btn('A', 'Enter')}: send      {self.btn('B', 'Esc')}: skip      "
+                f"{self.btn('X', 'Backspace')}: delete")
+
+    def entry_line(self):
+        """The name being typed. The keyboard caret stays at the end; a pad shows which letter it is on."""
+        caret = "_" if int(self.end_t * 2.5) % 2 == 0 else " "
+        name = self.entry_name
+        c = self.entry_cursor
+        if c is None or c >= len(name):
+            shown = name + caret
+            return shown if (name or caret != " ") else " "
+        ch = name[c]
+        mark = f"[{ch}]" if caret == "_" else ch
+        return name[:c] + mark + name[c + 1:]
+
+    def apply_pad(self, dt):
+        """One frame of the first pad: menus, name entry, and a tapped step.
+        Held walking is applied later, in update(), from the stick."""
+        if self.pads is None:
+            return
+        pad = self.pads.player(0)
+        if pad is None:
+            self._pad_dir = (0, 0)
+            return
+        editing = self.mode == "lobby" and isinstance(self.lobby, C.JoinLobby) and self.lobby.edit
+        ctx = (self.mode, self.entry_active, bool(self.show_map), bool(self.paused), editing)
+        if ctx != self._pad_ctx:
+            self._pad_ctx = ctx
+            self._menu_repeat.reset()
+        menu = self.entry_active or self.mode in ("title", "lobby")
+        if menu:
+            for dx, dy in self._menu_repeat.pulses(pad.menu_vector(), dt):
+                self._pad_menu(dx, dy)
+        elif self.mode == "play" and not self.show_map and not self.paused:
+            move = pad.digital_move()
+            if move != self._pad_dir:
+                if move[0]:
+                    self.try_action(("turn", move[0]))
+                elif move[1]:
+                    self.try_action(("step", move[1]))
+            self._pad_dir = move
+        else:
+            self._pad_dir = (0, 0)
+        for button in pad.pressed:
+            self._pad_button(button)
+
+    def _pad_menu(self, dx, dy):
+        if self.entry_active:
+            self.entry_pad_move(dx, dy)
+        elif self.mode == "title":
+            if dx < 0:
+                self.title_pick = 0
+            elif dx > 0:
+                self.title_pick = 1
+            if dy < 0:
+                self.title_opt = (self.title_opt - 1) % len(TITLE_OPTIONS)
+            elif dy > 0:
+                self.title_opt = (self.title_opt + 1) % len(TITLE_OPTIONS)
+        elif self.mode == "lobby" and isinstance(self.lobby, C.JoinLobby):
+            self.lobby.pad_move(dx, dy)
+
+    def _pad_button(self, button):
+        if button == pads.GUIDE:
+            return
+        if self.entry_active:
+            if button in (pads.A, pads.START):
+                self.entry_key(pygame.K_RETURN)
+            elif button == pads.B:
+                self.entry_key(pygame.K_ESCAPE)
+            elif button == pads.X:
+                self.entry_pad_delete()
+            return
+        if button == pads.B:
+            self._pad_back()
+            return
+        if self.mode == "lobby" and isinstance(self.lobby, C.JoinLobby) and button == pads.X:
+            self.lobby.pad_delete()
+            return
+        if button == pads.A or (button == pads.START and self.mode in ("title", "lobby", "end")):
+            self.on_key(pygame.K_RETURN)
+            return
+        if button == pads.START:
+            self.on_key(pygame.K_p)
+            return
+        if button in (pads.Y, pads.X) and self.mode in ("play", "watch"):
+            self.on_key(pygame.K_TAB)
+
+    def _pad_back(self):
+        """B / Circle, the same places Esc goes, except the title screen (hold Back to quit)."""
+        if self.entry_active:
+            self.entry_key(pygame.K_ESCAPE)
+            return
+        if self.mode == "lobby":
+            if isinstance(self.lobby, C.JoinLobby) and not self.lobby.pad_back():
+                return
+            self.close_lobby()
+            return
+        if self.mode == "title":
+            return
+        if self.show_map:
+            self.show_map = False
+            return
+        self.to_title()
+
+    def entry_pad_move(self, dx, dy):
+        """Left/right moves along the name; up/down cycles the letter under the cursor."""
+        if dx:
+            self.entry_cursor = max(0, min(len(self.entry_name), self.entry_cursor + dx))
+        if dy:
+            self._entry_cycle(-1 if dy > 0 else 1)
+
+    def _entry_cycle(self, step):
+        if self.entry_cursor >= len(self.entry_name):
+            if len(self.entry_name) >= scores.NAME_MAX:
+                return
+            ch = NAME_CYCLE[0] if step > 0 else NAME_CYCLE[-1]
+            self.entry_name += ch
+            self.entry_cursor = len(self.entry_name) - 1
+            return
+        ch = self.entry_name[self.entry_cursor]
+        self.entry_name = (self.entry_name[:self.entry_cursor] + self._cycled(ch, NAME_CYCLE, step)
+                           + self.entry_name[self.entry_cursor + 1:])
+
+    @staticmethod
+    def _cycled(ch, alphabet, step):
+        base = ch.lower() if isinstance(ch, str) and ch.isalpha() else ch
+        if base not in alphabet:
+            base = alphabet[0]
+        i = alphabet.index(base)
+        return alphabet[(i + step) % len(alphabet)]
+
+    def entry_pad_delete(self):
+        """Delete the letter the pad is on, or the last letter if the cursor is past the end."""
+        name = self.entry_name
+        c = self.entry_cursor
+        if not name:
+            return
+        if c >= len(name):
+            self.entry_name = name[:-1]
+            self.entry_cursor = len(self.entry_name)
+            return
+        self.entry_name = name[:c] + name[c + 1:]
+        self.entry_cursor = min(c, len(self.entry_name))
 
     def steer(self, d, back=True):
         """(turn, move) that heads in world direction d with the tank controls:
@@ -1090,9 +1304,10 @@ class Game:
         return bumped
 
     # ------------------------------------------------------------ update
-    def update(self, dt, keys=None, auto=None, ctrl=None):
+    def update(self, dt, keys=None, auto=None, ctrl=None, pad_dir=None):
         """keys: held keys (tank controls); ctrl: (turn, move) directly;
-        auto: a world direction, steered to with the tank controls."""
+        auto: a world direction, steered to with the tank controls.
+        pad_dir: (turn, move) from a gamepad, used only when no key is held."""
         self.board_t += dt
         if self.board_t > BOARD_REFRESH:
             self.board_t = 0.0
@@ -1156,6 +1371,14 @@ class Game:
             turn, move = self.controls(keys)
         else:
             turn, move = 0, 0
+        # A centred pad changes nothing, and a held key wins over the stick,
+        # so keyboard play is the same as it was. Autopilot (auto/ctrl) is left alone.
+        if ctrl is None and auto is None and turn == 0 and move == 0 and pad_dir is not None:
+            pt, pm = pad_dir
+            if pt:
+                turn, move = pt, 0
+            elif pm:
+                turn, move = 0, pm
         if self.turning:
             self.turn_t += dt
             if self.turn_t >= TURN_S:
@@ -2109,7 +2332,7 @@ class Game:
         if self.show_map:
             self.draw_map()
         if self.paused:
-            self.banner("Paused", "Press P to carry on")
+            self.banner("Paused", self.pause_caption())
         if self.fade:
             phase, ft, _ = self.fade
             k = ft / FADE if phase == "out" else 1 - ft / FADE
@@ -2603,8 +2826,19 @@ class Game:
             self.glow_cache["hud_key"] = (k, dim)
         k, dim = self.glow_cache["hud_key"]
         s.blit(k if self.key_state == "carried" else dim, (kx + 54, 11))
-        hint = self.text(self.f_small, "Tab: map" if self.coop else "Tab: map   P: pause", (150, 130, 110), shadow=False)
-        s.blit(hint, (kx - hint.get_width() - 36, 19))
+        if self.use_pad():
+            hint_s = f"{self.btn('Y', 'Tab')}: map" if self.coop else f"{self.btn('Y', 'Tab')}: map   {self.btn('START', 'P')}: pause"
+        else:
+            hint_s = "Tab: map" if self.coop else "Tab: map   P: pause"
+        hint = self.text(self.f_small, hint_s, (150, 130, 110), shadow=False)
+        # Sit in the gap between the room name and the key. A short hint (the
+        # keyboard's) keeps its old place; a longer pad hint stops short of the name.
+        left = kx - hint.get_width() - 36
+        if self.use_pad():
+            name_right = (WIN_W + name.get_width()) / 2
+            if left < name_right + 10:
+                left = name_right + 10
+        s.blit(hint, (left, 19))
         if self.msg and self.msg_t > 0:
             img = self.text(self.f_msg, self.msg, (255, 240, 210))
             a = min(1.0, self.msg_t / 0.4)
@@ -2682,8 +2916,7 @@ class Game:
                         pygame.draw.rect(s, (200, 150, 90), (rx + cw, ry + ch / 2 - 5, gap, 10))
                     elif d["to"] in self.visited and side == "S":
                         pygame.draw.rect(s, (200, 150, 90), (rx + cw / 2 - 5, ry + ch, 10, gap))
-        foot = self.text(self.f_help, f"Rooms explored: {len(self.visited)} of {len(self.house.rooms)}      "
-                                      "Arrows: stairs, ladders and trapdoors      Tab / M: close", (230, 214, 180))
+        foot = self.text(self.f_help, self.map_footer(), (230, 214, 180))
         s.blit(foot, ((WIN_W - foot.get_width()) / 2, WIN_H - 52))
 
     def draw_end(self):
@@ -2736,18 +2969,17 @@ class Game:
             y += im.get_height() + 26
         y += 4
         if self.entry_active:
-            pw, ph = 560, 150
+            hint_im = self.text(self.f_small, self.name_hint(), (200, 180, 150))
+            pw, ph = max(560, hint_im.get_width() + 48), 150
             panel = pygame.Surface((pw, ph), pygame.SRCALPHA)
             panel.fill((10, 6, 14, 225))
             pygame.draw.rect(panel, (230, 130, 40), panel.get_rect(), 2, border_radius=6)
             s.blit(panel, ((WIN_W - pw) / 2, y))
             im = self.text(self.f_help, "You're in the Top 10! Type your name:", (255, 236, 190))
             s.blit(im, ((WIN_W - im.get_width()) / 2, y + 14))
-            caret = "_" if int(self.end_t * 2.5) % 2 == 0 else " "
-            im = self.text(self.f_big, (self.entry_name + caret) if (self.entry_name or caret != " ") else " ", (255, 190, 80))
+            im = self.text(self.f_big, self.entry_line(), (255, 190, 80))
             s.blit(im, ((WIN_W - im.get_width()) / 2, y + 40))
-            hint = f"Up to {scores.NAME_MAX} letters or numbers"
-            im = self.text(self.f_small, f"{hint}      Enter: send      Esc: skip", (200, 180, 150))
+            im = self.text(self.f_small, self.name_hint(), (200, 180, 150))
             s.blit(im, ((WIN_W - im.get_width()) / 2, y + ph - 28))
             return
         note = self.entry_status()
@@ -2755,7 +2987,9 @@ class Game:
             im = self.text(self.f_help, note, (190, 215, 255))
             s.blit(im, ((WIN_W - im.get_width()) / 2, y))
         if self.end_t > 1.0:
-            im = self.text(self.f_help, "Press Enter to return to the title screen", (200, 180, 150))
+            back = "Press Enter to return to the title screen" if not self.use_pad() \
+                else f"Press {self.btn('A', 'Enter')} to return to the title screen"
+            im = self.text(self.f_help, back, (200, 180, 150))
             s.blit(im, ((WIN_W - im.get_width()) / 2, WIN_H - 120))
 
     # ------------------------------------------------------------ title
@@ -2986,10 +3220,7 @@ class Game:
 
     def draw_controls(self):
         s = self.screen
-        lines = ["Left / Right (or 1 / 2): choose character      Up / Down: alone, host or join      Enter: start",
-                 "Left / Right (A / D): turn      Up / Down (W / S): walk forwards / backwards",
-                 "Space / E: search or lift      Walk into chairs, chests and crates to push them",
-                 "Tab / M: map      P: pause      Esc: title screen"]
+        lines = self.control_lines()
         bl = self.best_line()
         ph = 30 * len(lines) + (34 if bl else 0) + 14
         panel = pygame.Surface((960, ph), pygame.SRCALPHA)
@@ -3026,6 +3257,10 @@ def parse_args(argv):
     p.add_argument("--scores-file", default=None, help="debug: high score file instead of ~/.haunted_mansion/scores.json")
     p.add_argument("--show-top10", action="store_true", help="debug: keep the Top 10 on the title screen")
     p.add_argument("--score", type=int, default=None, help="debug: score for the scene (e.g. win/lose name entry)")
+    p.add_argument("--fullscreen", action="store_true",
+                   help="fill the display, scaled from 1280x800 (also on when ZENSTATION=1)")
+    p.add_argument("--pad", choices=tuple(pads.PAD_NAMES), default=None,
+                   help="treat this controller as connected, for hints and screenshots")
     return p.parse_args(argv)
 
 
@@ -3038,15 +3273,18 @@ def main(argv=None):
     pygame.init()
     pygame.display.set_caption(TITLE_NAME)
     headless = args.scene is not None
-    flags = 0 if headless else (pygame.SCALED | pygame.RESIZABLE)
-    try:
-        window = pygame.display.set_mode((WIN_W, WIN_H), flags)
-    except pygame.error:
-        window = pygame.display.set_mode((WIN_W, WIN_H))
+    fullscreen = (not headless) and screenfit.fullscreen_requested(args.fullscreen)
+    view = screenfit.open_display((WIN_W, WIN_H), fullscreen=fullscreen, headless=headless)
+    window = view.surface
     game = Game(window, seed=args.seed, character=args.character, enemies=not args.no_enemies,
                 save=not headless, title=args.scene in (None, "title") and args.room is None,
                 online=not (headless or args.offline), scores_file=args.scores_file)
     game.show_top10 = args.show_top10
+    game.pads = pads.Pads()
+    if not headless:
+        game.pads.scan()
+    if args.pad:
+        game.pads.attach_synthetic(pads.PAD_NAMES[args.pad])
     game.net_port = args.port
     if args.hidden_key:
         game.key_hidden = True
@@ -3093,9 +3331,12 @@ def main(argv=None):
     running = True
     while running:
         dt = min(0.05, clock.tick(60) / 1000.0)
+        game.pads.begin_frame()
         for ev in pygame.event.get():
             if ev.type == pygame.QUIT:
                 running = False
+            elif game.pads.handle_event(ev):
+                pass
             elif ev.type == pygame.TEXTINPUT:
                 game.on_text(ev.text)
             elif ev.type == pygame.KEYDOWN:
@@ -3112,9 +3353,20 @@ def main(argv=None):
                         game.to_title()
                 else:
                     game.on_key(ev.key)
-        game.update(dt, keys=pygame.key.get_pressed())
+        game.pads.poll()
+        game.pads.finish()
+        # Holding Back / Share for about a second leaves cleanly, back to the launcher.
+        if game.pads.consume_quit(dt):
+            running = False
+            break
+        game.apply_pad(dt)
+        pad_dir = None
+        p0 = game.pads.player(0)
+        if p0 is not None and game.mode == "play" and not game.show_map and not game.paused:
+            pad_dir = p0.digital_move()
+        game.update(dt, keys=pygame.key.get_pressed(), pad_dir=pad_dir)
         game.draw()
-        pygame.display.flip()
+        view.present()
     game.end_coop()       # tell the other player we've gone
     game.close_lobby()
     pygame.quit()
