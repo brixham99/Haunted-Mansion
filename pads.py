@@ -47,9 +47,9 @@ QUIT_HOLD_S = 1.0
 # British names for the on-screen hints. SDL's logical buttons match Xbox;
 # a PlayStation pad is the same buttons with its own names.
 LABELS = {
-    "xbox": {"A": "A", "B": "B", "X": "X", "Y": "Y", "START": "Start", "BACK": "Back"},
+    "xbox": {"A": "A", "B": "B", "X": "X", "Y": "Y", "START": "Start", "BACK": "Back", "RT": "RT"},
     "playstation": {"A": "Cross", "B": "Circle", "X": "Square", "Y": "Triangle",
-                    "START": "Options", "BACK": "Share"},
+                    "START": "Options", "BACK": "Share", "RT": "R2"},
 }
 
 # --pad on the command line, and the name a real pad of that sort reports.
@@ -163,6 +163,7 @@ class Pad:
         self.pressed = set()
         self.axes = {a: 0.0 for a in AXES}
         self._axis_dir = {AXIS_LEFTX: 0, AXIS_LEFTY: 0}
+        self._rt_on = False         # right trigger pulled: walk forwards
         self.back_held = 0.0
 
     def set_button(self, button, down: bool):
@@ -176,6 +177,8 @@ class Pad:
         self.axes[axis] = v
         if axis in self._axis_dir:
             self._axis_dir[axis] = self._hysteresis(axis, v)
+        elif axis == AXIS_TRIGGERRIGHT:
+            self._rt_on = v >= RELEASE_ZONE if self._rt_on else v >= DEADZONE
 
     def _hysteresis(self, axis, value: float) -> int:
         cur = self._axis_dir[axis]
@@ -221,6 +224,8 @@ class Pad:
             return x, 0
         if y:
             return 0, -y          # stick / D-pad up is forwards
+        if self._rt_on:
+            return 0, 1           # right trigger walks forwards (A is the action button)
         return 0, 0
 
     def menu_vector(self):

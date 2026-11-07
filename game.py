@@ -838,7 +838,7 @@ class Game:
         back = self.btn("BACK", "Esc")
         return [
             f"Left / Right: Archie or Holly      Up / Down: alone, host or join      {a}: start",
-            "Left stick or D-pad: turn and walk",
+            "Left stick or D-pad: turn and walk" + (f"      {self.btn('RT', '')}: walk forwards" if self.use_pad() else ""),
             f"{a}: search or lift      {y}: map      {start}: pause      {b}: title screen",
             f"Hold {back} for a second: quit",
         ]

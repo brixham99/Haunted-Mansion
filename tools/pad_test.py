@@ -173,6 +173,13 @@ def test_pad_math():
     check(move_axis(pads.AXIS_LEFTX, 0.0) == (0, 0), "stick back to centre")
     check(move_axis(pads.AXIS_LEFTY, -0.8) == (0, 1), "stick up walks forwards")
     check(move_axis(pads.AXIS_LEFTY, 0.8) == (0, -1), "stick down walks backwards")
+    check(move_axis(pads.AXIS_LEFTY, 0.0) == (0, 0), "stick back to centre again")
+    check(move_axis(pads.AXIS_TRIGGERRIGHT, 1) == (0, 0), "a resting raw right trigger does not walk")
+    check(move_axis(pads.AXIS_TRIGGERRIGHT, 32767) == (0, 1), "right trigger pulled walks forwards")
+    check(move_axis(pads.AXIS_LEFTX, 0.8) == (1, 0), "a turn still wins over the trigger")
+    move_axis(pads.AXIS_LEFTX, 0.0)
+    check(move_axis(pads.AXIS_TRIGGERRIGHT, 0) == (0, 0), "trigger let go: stop")
+    check(pads.Pads().label("RT") == "RT", "Xbox trigger hint")
     # Both axes out: the turn wins, as a held turn wins over a held step on the keyboard.
     pad.set_axis(pads.AXIS_LEFTX, 0.6)
     pad.set_axis(pads.AXIS_LEFTY, -0.9)
