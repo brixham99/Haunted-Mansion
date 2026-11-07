@@ -506,15 +506,16 @@ class HostLobby:
 
     def lines(self):
         G = sys.modules[type(self.g).__module__]
+        back = self.g.btn("B", "Esc") if hasattr(self.g, "btn") else "Esc"
         if self.error:
             return ["Couldn't start a game", self.error, "Is another game already hosting on this computer?",
-                    "Esc: back"]
+                    f"{back}: back"]
         dots = "." * (1 + int(self.g.title_t * 2) % 3)
         return [f"Hosting as {G.CHARACTERS[self.g.character]}",
                 f"Waiting for the other player to join{dots}",
                 f"Your address: {self.ip}   (port {self.port})",
                 "On the other computer choose Join a game: it should appear in the list,",
-                "or type this address there.   Esc: cancel"] + ([self.note] if self.note else [])
+                f"or type this address there.   {back}: cancel"] + ([self.note] if self.note else [])
 
 
 class JoinLobby:
@@ -524,6 +525,8 @@ class JoinLobby:
         self.g = game
         self.scanner = net.Scanner()
         self.typed = ""
+        self.cursor = 0            # pad: which character of the address is being edited
+        self.edit = False          # pad: up/down cycles the address instead of the host list
         self.pick = 0
         self.conn = None
         self.link = None
@@ -533,10 +536,14 @@ class JoinLobby:
     def hosts(self):
         return self.scanner.hosts()
 
+    # Characters a host address can hold. Up on a pad walks this forwards.
+    ADDR_CYCLE = "0123456789abcdefghijklmnopqrstuvwxyz.-:"
+
     def on_text(self, text):
         for ch in text:
             if (ch.isascii() and (ch.isalnum() or ch in ".-:")) and len(self.typed) < 40:
                 self.typed += ch
+        self.cursor = len(self.typed)
 
     def on_key(self, key, pg):
         if self.conn is not None or self.link is not None:
@@ -544,6 +551,7 @@ class JoinLobby:
         found = self.hosts()
         if key == pg.K_BACKSPACE:
             self.typed = self.typed[:-1]
+            self.cursor = len(self.typed)
         elif key in (pg.K_UP, pg.K_DOWN) and found:
             self.pick = (self.pick + (1 if key == pg.K_DOWN else -1)) % len(found)
         elif key in (pg.K_RETURN, pg.K_KP_ENTER):
@@ -559,6 +567,57 @@ class JoinLobby:
                 self.status = "No games found yet. Type the host's address, or wait."
                 return
             self.connect(host, port)
+
+    def pad_move(self, dx, dy):
+        """D-pad / stick. Up and down pick a game, unless the address is being edited
+        (or none have been found), in which case they cycle a character."""
+        if self.conn is not None or self.link is not None:
+            return
+        found = self.hosts()
+        if not self.edit and found and not dx:
+            if dy:
+                self.pick = (self.pick + (1 if dy > 0 else -1)) % len(found)
+            return
+        self.edit = True
+        if dx:
+            self.cursor = max(0, min(len(self.typed), self.cursor + dx))
+        if not dy:
+            return
+        step = -1 if dy > 0 else 1
+        if self.cursor >= len(self.typed):
+            if len(self.typed) >= 40:
+                return
+            ch = self.ADDR_CYCLE[0] if step > 0 else self.ADDR_CYCLE[-1]
+            self.typed += ch
+            self.cursor = len(self.typed) - 1
+            return
+        ch = self.typed[self.cursor]
+        alphabet = self.ADDR_CYCLE
+        base = ch if ch in alphabet else alphabet[0]
+        nxt = alphabet[(alphabet.index(base) + step) % len(alphabet)]
+        self.typed = self.typed[:self.cursor] + nxt + self.typed[self.cursor + 1:]
+
+    def pad_delete(self):
+        """X / Square: delete the character under the cursor."""
+        if self.conn is not None or self.link is not None or not self.typed:
+            return
+        self.edit = True
+        if self.cursor >= len(self.typed):
+            self.typed = self.typed[:-1]
+            self.cursor = len(self.typed)
+            return
+        self.typed = self.typed[:self.cursor] + self.typed[self.cursor + 1:]
+        self.cursor = min(self.cursor, len(self.typed))
+
+    def pad_back(self):
+        """B / Circle. Leave address editing first; the next press leaves the lobby.
+        Returns True when the lobby itself should close."""
+        if self.conn is not None or self.link is not None:
+            return True
+        if self.edit:
+            self.edit = False
+            return False
+        return True
 
     def connect(self, host, port):
         self.conn = net.Connector(host, port)
@@ -615,6 +674,22 @@ class JoinLobby:
             dots = "." * (1 + int(self.g.title_t * 2) % 3)
             out.append(f"Looking for games on your network{dots}")
         caret = "_" if int(self.g.title_t * 2.5) % 2 == 0 else " "
-        out.append(f"Or type the host's address: {self.typed}{caret}")
-        out.append(self.status or "Enter: join      Esc: back")
+        shown = self._address_field(caret)
+        out.append(f"Or type the host's address: {shown}")
+        confirm = self.g.btn("A", "Enter") if hasattr(self.g, "btn") else "Enter"
+        back = self.g.btn("B", "Esc") if hasattr(self.g, "btn") else "Esc"
+        out.append(self.status or f"{confirm}: join      {back}: back")
+        if hasattr(self.g, "use_pad") and self.g.use_pad() and (self.edit or not found):
+            delete = self.g.btn("X", "Backspace")
+            out.append(f"Up / Down: character      Left / Right: move      {delete}: delete")
         return out
+
+    def _address_field(self, caret):
+        """The address plus a caret. With the cursor at the end this is the keyboard's line."""
+        t = self.typed
+        c = self.cursor
+        if c >= len(t):
+            return f"{t}{caret}"
+        ch = t[c]
+        mark = f"[{ch}]" if caret == "_" else ch
+        return t[:c] + mark + t[c + 1:]

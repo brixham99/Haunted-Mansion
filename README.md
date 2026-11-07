@@ -23,6 +23,12 @@ The game is drawn at 1280 x 800 and the window can be resized. It uses pygame-ce
 - **Space or E** searches the furniture you are facing (wardrobes, bookcases, grandfather clocks, paintings, coffins...) or lifts a rug. (While the key is out in the open, there's never anything inside.)
 - **Walk into** chairs, armchairs, chests, crates and the rocking horse to push them. Rooms tidy themselves when you leave, so you can never get stuck.
 - **Tab or M** shows the map of the rooms you have explored. **P** pauses. **Esc** goes back to the title screen.
+
+## On a television
+
+The picture is drawn at 1280×800. On a TV, start with `ZENSTATION=1 python3 game.py` (the Zen Station launcher sets that) or `python3 game.py --fullscreen`. The game then fills the set at its own resolution: the 1280×800 picture is scaled to fit, with the shape kept, so a 16:9 screen has black bars on the left and right. There is no window frame, and the mouse pointer is hidden. Started without either of those, it is the same resizable window as before.
+
+A wired Xbox pad, or a PlayStation pad over a wire or Bluetooth, can play every screen: the title and the choice of character, hosting or joining a game, the house itself, the map, pause, the ending and the high-score name. The left stick and the D-pad turn and walk as the arrow keys do. **A** (Cross on a PlayStation pad) is the main button, **B** (Circle) goes back, **Y** (Triangle) opens the map and **Start** (Options) pauses. For a high-score name, up and down change the letter, left and right move along it, and A accepts; the name is capitalised just as it is when typed. Hold **Back** (Share) for about a second to quit back to the launcher. Hints name the pad's buttons while one is connected, and the keys otherwise. Two players still use two computers; each player uses the pad on their own.
 - Ghosts and bats float through furniture; goblins, spiders, skeletons and the monster walk round it. If one touches you, you lose a life and go back to where you came in. You have five lives (five hearts each in a two-player game).
 - **Hidden-key mode** (the harder game, off for now): start with `python3 game.py --hidden-key`, or set `KEY_HIDDEN = True` in `mansion.py`. The key is then usually hidden inside or behind furniture, under something you can push or under a rug. In a two-player game the host's setting is used.
 - Once you have the key, get back to the **Entrance Hall** and walk into the front door. Your time is shown at the end; your best time is saved on this computer.
