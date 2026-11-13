@@ -1,5 +1,7 @@
 # Haunted Mansion
 
+[![Downloads](https://img.shields.io/github/downloads/brixham99/Haunted-Mansion/total)](https://github.com/brixham99/Haunted-Mansion/releases) [![Latest release downloads](https://img.shields.io/github/downloads/brixham99/Haunted-Mansion/latest/total)](https://github.com/brixham99/Haunted-Mansion/releases/latest)
+
 ![Haunted Mansion screenshot](docs/screenshot.png)
 
 A Halloween isometric flip-screen adventure in the style of Knight Lore but themed more like Atic Atac, both games from Ultimate circa 1983-84. Play as Archie or Holly, explore a haunted mansion of 35 rooms over four floors, find the front door key (somewhere different every game) and escape through the front door.
